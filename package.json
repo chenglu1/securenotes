@@ -1,15 +1,18 @@
 {
-  "name": "electron-vite-boilerplate",
-  "version": "2.0.0",
+  "name": "securenotes",
+  "version": "1.0.0",
   "main": "dist-electron/main.js",
-  "description": "Really simple Electron + Vite boilerplate.",
-  "author": "草鞋没号 <308487730@qq.com>",
+  "description": "离线优先、支持实时协作、端到端加密的 Markdown 笔记应用",
+  "author": "chenglud <chenglud@digitalchina.com>",
   "license": "MIT",
   "private": true,
   "keywords": [
     "electron",
-    "rollup",
-    "vite"
+    "markdown",
+    "notes",
+    "e2e-encryption",
+    "crdt",
+    "offline-first"
   ],
   "debug": {
     "env": {
@@ -22,10 +25,42 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/libsodium-wrappers": "^0.7.14",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.7.0",
     "electron": "^28.1.0",
     "electron-builder": "^24.4.0",
     "typescript": "^5.0.3",
     "vite": "^5.0.10",
-    "vite-plugin-electron": "^0.15.4"
+    "vite-plugin-electron": "^0.28.8",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "dependencies": {
+    "@tanstack/react-virtual": "^3.13.19",
+    "@tiptap/core": "^3.20.0",
+    "@tiptap/extension-code-block-lowlight": "^3.20.0",
+    "@tiptap/extension-collaboration": "^3.20.0",
+    "@tiptap/extension-highlight": "^3.20.0",
+    "@tiptap/extension-image": "^3.20.0",
+    "@tiptap/extension-link": "^3.20.0",
+    "@tiptap/extension-placeholder": "^3.20.0",
+    "@tiptap/extension-task-item": "^3.20.0",
+    "@tiptap/extension-task-list": "^3.20.0",
+    "@tiptap/pm": "^3.20.0",
+    "@tiptap/react": "^3.20.0",
+    "@tiptap/starter-kit": "^3.20.0",
+    "libsodium-wrappers": "^0.8.2",
+    "lowlight": "^3.3.0",
+    "lucide-react": "^0.575.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.1",
+    "sql.js": "^1.14.0",
+    "uuid": "^13.0.0",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.29",
+    "zustand": "^5.0.11"
   }
 }
