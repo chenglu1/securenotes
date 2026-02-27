@@ -1,12 +1,12 @@
-import initSqlJs, { Database as SqlJsDatabase } from 'sql.js'
+import initSqlJs, { Database } from 'sql.js'
 import { join } from 'path'
 import { app } from 'electron'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 
-let db: SqlJsDatabase | null = null
+let db: Database | null = null
 let dbPath: string | null = null
 
-export async function initDatabase(): Promise<SqlJsDatabase> {
+export async function initDatabase(): Promise<Database> {
   if (db) return db
 
   const SQL = await initSqlJs()
@@ -36,7 +36,7 @@ export async function initDatabase(): Promise<SqlJsDatabase> {
   return db
 }
 
-export function getDatabase(): SqlJsDatabase {
+export function getDatabase(): Database {
   if (!db) {
     throw new Error('Database not initialized. Call initDatabase() first.')
   }
@@ -50,7 +50,7 @@ export function saveDatabase(): void {
   writeFileSync(dbPath, buffer)
 }
 
-function runMigrations(db: SqlJsDatabase) {
+function runMigrations(db: Database) {
   db.run(`
     CREATE TABLE IF NOT EXISTS notes (
       id            TEXT PRIMARY KEY,
