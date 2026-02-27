@@ -18,7 +18,7 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    icon: join(PUBLIC, 'logo.svg'),
+    icon: join(PUBLIC, 'icon.png'),
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: '#0f0f13',
