@@ -5,8 +5,10 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { SyncModule } from './sync/sync.module';
 import { CollaborationModule } from './collaboration/collaboration.module';
+import { UploadModule } from './upload/upload.module';
 import { Note } from './entities/note.entity';
 import { User } from './entities/user.entity';
+import { Image } from './entities/image.entity';
 
 @Module({
   imports: [
@@ -28,7 +30,7 @@ import { User } from './entities/user.entity';
       ssl: process.env.DB_HOST?.includes('neon.tech') ? { 
         rejectUnauthorized: false 
       } : false,
-      entities: [Note, User],
+      entities: [Note, User, Image],
       synchronize: process.env.NODE_ENV !== 'production', // Auto-create tables in dev
       logging: process.env.NODE_ENV === 'development',
       // 连接池配置
@@ -48,6 +50,7 @@ import { User } from './entities/user.entity';
     AuthModule,
     SyncModule,
     CollaborationModule,
+    UploadModule,
   ],
 })
 export class AppModule {}

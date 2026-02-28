@@ -31,5 +31,19 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'src'),
     },
+    // 强制使用单一 React 实例，避免版本冲突
+    dedupe: ['react', 'react-dom'],
+  },
+  optimizeDeps: {
+    // 强制预构建这些依赖，确保使用同一个 React 实例
+    include: ['react', 'react-dom', '@chenglu1/xeditor-editor'],
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
   },
 })

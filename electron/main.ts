@@ -43,6 +43,8 @@ function createWindow() {
 
   if (url) {
     win.loadURL(url)
+    // 开发模式自动打开 DevTools
+    win.webContents.openDevTools()
   } else {
     win.loadFile(join(DIST, 'index.html'))
   }

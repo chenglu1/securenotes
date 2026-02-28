@@ -639,3 +639,10 @@ body {
 .sync-dot.offline {
   background: var(--text-muted);
 }
+
+/* ── 编辑器工具栏固定定位 ── */
+.tiptap-toolbar[data-variant=fixed] {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+}

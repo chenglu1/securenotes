@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useEditor, EditorContent } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Placeholder from '@tiptap/extension-placeholder'
-import Highlight from '@tiptap/extension-highlight'
-import TaskList from '@tiptap/extension-task-list'
-import TaskItem from '@tiptap/extension-task-item'
-import Link from '@tiptap/extension-link'
-import Image from '@tiptap/extension-image'
+import { ConfigurableTiptapEditor } from '@chenglu1/xeditor-editor'
 import { useNoteStore } from '../../stores/noteStore'
-import { EditorToolbar } from './EditorToolbar'
+import { uploadImage } from '../../services/uploadService'
 import { FileText, Trash2 } from 'lucide-react'
 
 export function EditorPane() {
@@ -19,65 +12,34 @@ export function EditorPane() {
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId)
   const [title, setTitle] = useState('')
+  const [content, setContent] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const isUpdatingRef = useRef(false)
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
-        codeBlock: false, // We'll use lowlight version later
-      }),
-      Placeholder.configure({
-        placeholder: '开始写点什么...',
-      }),
-      Highlight,
-      TaskList,
-      TaskItem.configure({
-        nested: true,
-      }),
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-      }),
-      Image,
-    ],
-    content: '',
-    editorProps: {
-      attributes: {
-        spellcheck: 'false',
-      },
-    },
-    onUpdate: ({ editor }) => {
-      if (isUpdatingRef.current) return
+  // Load note content when selection changes
+  useEffect(() => {
+    if (!selectedNote) {
+      setTitle('')
+      setContent('')
+      return
+    }
+
+    setTitle(selectedNote.title)
+    setContent(selectedNote.content || '')
+  }, [selectedNoteId, selectedNote])
+
+  const handleContentChange = useCallback(
+    (newContent: string) => {
+      setContent(newContent)
       if (!selectedNoteId) return
-
-      const content = editor.getHTML()
 
       // Debounced auto-save
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
-        updateNote(selectedNoteId, { content })
+        updateNote(selectedNoteId, { content: newContent })
       }, 500)
     },
-  })
-
-  // Load note content when selection changes
-  useEffect(() => {
-    if (!editor) return
-    if (!selectedNote) {
-      isUpdatingRef.current = true
-      editor.commands.setContent('')
-      setTitle('')
-      isUpdatingRef.current = false
-      return
-    }
-
-    isUpdatingRef.current = true
-    setTitle(selectedNote.title)
-    editor.commands.setContent(selectedNote.content || '')
-    isUpdatingRef.current = false
-  }, [selectedNoteId, editor]) // eslint-disable-line react-hooks/exhaustive-deps
+    [selectedNoteId, updateNote]
+  )
 
   const handleTitleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,10 +66,29 @@ export function EditorPane() {
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter') {
         e.preventDefault()
-        editor?.commands.focus('start')
       }
     },
-    [editor]
+    []
+  )
+
+  // 图片上传处理函数
+  const handleImageUpload = useCallback(
+    async (
+      file: File,
+      onProgress?: (event: { progress: number }) => void,
+      abortSignal?: AbortSignal
+    ): Promise<string> => {
+      try {
+        // 使用上传服务
+        const imageUrl = await uploadImage(file, onProgress, abortSignal)
+        return imageUrl
+      } catch (error) {
+        console.error('图片上传失败:', error)
+        // 可以在这里显示错误提示
+        throw error
+      }
+    },
+    []
   )
 
   // No note selected
@@ -145,10 +126,17 @@ export function EditorPane() {
         </button>
       </div>
 
-      {editor && <EditorToolbar editor={editor} />}
-
-      <div className="flex-1 overflow-y-auto px-xl py-xl">
-        <EditorContent editor={editor} />
+      <div className="flex-1 overflow-y-auto px-xl">
+        <ConfigurableTiptapEditor
+          value={content}
+          contentType="html"
+          placeholder="开始写点什么..."
+          onChange={handleContentChange}
+          showToolbar={true}
+          uploadHandler={handleImageUpload}
+          maxFileSize={5 * 1024 * 1024}
+          minHeight="100%"
+        />
       </div>
     </div>
   )
