@@ -29,7 +29,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@types/uuid": "^10.0.0",
-    "@vitejs/plugin-react": "^4.7.0",
+    "@vitejs/plugin-react": "^5.1.4",
     "autoprefixer": "^10.4.27",
     "electron": "^28.1.0",
     "electron-builder": "^24.4.0",
