@@ -28,7 +28,7 @@
     "@types/libsodium-wrappers": "^0.7.14",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "@types/uuid": "^10.0.0",
+    "@types/uuid": "^11.0.0",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.27",
     "electron": "^28.1.0",
