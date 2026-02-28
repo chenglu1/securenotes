@@ -113,11 +113,11 @@ export function EditorPane() {
   // No note selected
   if (!selectedNote) {
     return (
-      <div className="editor-pane">
-        <div className="empty-state fade-in">
-          <FileText className="empty-state-icon" size={64} />
-          <h2 className="empty-state-title">选择或创建一篇笔记</h2>
-          <p className="empty-state-desc">
+      <div className="flex-1 flex flex-col h-screen overflow-hidden bg-bg-primary">
+        <div className="flex flex-col items-center justify-center h-full text-text-muted gap-lg p-3xl text-center animate-[fadeIn_350ms_ease_forwards]">
+          <FileText className="w-16 h-16 opacity-30" size={64} />
+          <h2 className="text-lg font-medium text-text-secondary">选择或创建一篇笔记</h2>
+          <p className="text-sm max-w-[300px] leading-relaxed">
             从左侧选择一篇笔记开始编辑，或点击 + 按钮创建新笔记
           </p>
         </div>
@@ -126,21 +126,20 @@ export function EditorPane() {
   }
 
   return (
-    <div className="editor-pane fade-in">
-      <div className="editor-header">
+    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-bg-primary animate-[fadeIn_350ms_ease_forwards]">
+      <div className="flex items-center justify-between pt-[46px] px-xl pb-sm border-b border-border [-webkit-app-region:drag]">
         <input
           type="text"
-          className="editor-title-input"
+          className="text-2xl font-bold text-text-primary bg-transparent border-none outline-none w-full font-sans placeholder:text-text-muted [-webkit-app-region:no-drag]"
           placeholder="无标题"
           value={title}
           onChange={handleTitleChange}
           onKeyDown={handleTitleKeyDown}
         />
         <button
-          className="btn-icon"
+          className="w-9 h-9 p-0 border-none bg-transparent text-danger rounded-md cursor-pointer flex items-center justify-center hover:bg-bg-hover transition-all duration-fast [-webkit-app-region:no-drag]"
           onClick={handleDelete}
           title="删除笔记"
-          style={{ color: 'var(--danger)' }}
         >
           <Trash2 size={18} />
         </button>
@@ -148,7 +147,7 @@ export function EditorPane() {
 
       {editor && <EditorToolbar editor={editor} />}
 
-      <div className="editor-content">
+      <div className="flex-1 overflow-y-auto px-xl py-xl">
         <EditorContent editor={editor} />
       </div>
     </div>

@@ -2,7 +2,7 @@ import { Controller, Post, Get, Body, Query, Headers, UnauthorizedException } fr
 import { SyncService, PushNoteDto } from './sync.service';
 import { AuthService } from '../auth/auth.service';
 
-@Controller('api/sync')
+@Controller('sync')
 export class SyncController {
   constructor(
     private syncService: SyncService,

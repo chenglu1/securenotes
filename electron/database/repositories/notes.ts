@@ -115,4 +115,78 @@ export class NotesRepository {
     )
     saveDatabase()
   }
+
+  /**
+   * Upsert a note from cloud sync (insert or update based on sync version)
+   */
+  upsertFromCloud(cloudNote: {
+    id: string
+    title: string
+    content: string
+    syncVersion: number
+    createdAt: string
+    updatedAt: string
+    deletedAt?: string | null
+  }): Note | undefined {
+    const db = getDatabase()
+    
+    // 查询笔记（包括已删除的）
+    const stmt = db.prepare(`SELECT * FROM notes WHERE id = ?`)
+    stmt.bind([cloudNote.id])
+    let localNote: Note | undefined
+    if (stmt.step()) {
+      localNote = stmt.getAsObject() as unknown as Note
+    }
+    stmt.free()
+
+    // 如果本地笔记是脏数据（有未同步的修改），不要覆盖
+    if (localNote && localNote.is_dirty === 1) {
+      console.log(`⏭️ Skipping note ${cloudNote.id} - local changes not synced yet`)
+      return localNote
+    }
+
+    if (!localNote) {
+      // Insert new note from cloud
+      db.run(
+        `INSERT INTO notes (id, title, content, sync_version, is_dirty, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+        [
+          cloudNote.id,
+          cloudNote.title,
+          cloudNote.content,
+          cloudNote.syncVersion,
+          cloudNote.createdAt,
+          cloudNote.updatedAt,
+          cloudNote.deletedAt || null,
+        ]
+      )
+    } else {
+      // Update only if cloud version is strictly newer
+      if (cloudNote.syncVersion > (localNote.sync_version || 0)) {
+        db.run(
+          `UPDATE notes SET 
+            title = ?,
+            content = ?,
+            sync_version = ?,
+            is_dirty = 0,
+            updated_at = ?,
+            deleted_at = ?
+           WHERE id = ?`,
+          [
+            cloudNote.title,
+            cloudNote.content,
+            cloudNote.syncVersion,
+            cloudNote.updatedAt,
+            cloudNote.deletedAt || null,
+            cloudNote.id,
+          ]
+        )
+      }
+    }
+
+    saveDatabase()
+    
+    // 返回更新后的笔记（可能是 null 如果已删除）
+    return this.getById(cloudNote.id)
+  }
 }

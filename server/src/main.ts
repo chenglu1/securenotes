@@ -5,6 +5,9 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // 设置全局 API 前缀
+  app.setGlobalPrefix('api');
+
   app.enableCors({
     origin: true,
     credentials: true,

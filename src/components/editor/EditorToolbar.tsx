@@ -42,7 +42,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
   }
 
   return (
-    <div className="editor-toolbar">
+    <div className="flex items-center gap-0.5 px-xl py-sm border-b border-border bg-bg-secondary flex-wrap">
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBold().run()}
         isActive={editor.isActive('bold')}
@@ -79,7 +79,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         <Highlighter size={16} />
       </ToolbarButton>
 
-      <div className="toolbar-divider" />
+      <div className="w-px h-5 bg-border mx-xs" />
 
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
@@ -103,7 +103,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         <Heading3 size={16} />
       </ToolbarButton>
 
-      <div className="toolbar-divider" />
+      <div className="w-px h-5 bg-border mx-xs" />
 
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBulletList().run()}
@@ -127,7 +127,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         <ListChecks size={16} />
       </ToolbarButton>
 
-      <div className="toolbar-divider" />
+      <div className="w-px h-5 bg-border mx-xs" />
 
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
@@ -146,7 +146,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         <LinkIcon size={16} />
       </ToolbarButton>
 
-      <div className="toolbar-divider" />
+      <div className="w-px h-5 bg-border mx-xs" />
 
       <ToolbarButton
         onClick={() => editor.chain().focus().undo().run()}
@@ -181,11 +181,12 @@ function ToolbarButton({
 }) {
   return (
     <button
-      className={`toolbar-btn ${isActive ? 'is-active' : ''}`}
+      className={`flex items-center justify-center w-8 h-8 border-none bg-transparent text-text-secondary rounded-sm cursor-pointer transition-all duration-fast [-webkit-app-region:no-drag] hover:bg-bg-hover hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed ${
+        isActive ? 'bg-primary/25 text-primary' : ''
+      }`}
       onClick={onClick}
       disabled={disabled}
       title={title}
-      style={{ opacity: disabled ? 0.3 : 1 }}
     >
       {children}
     </button>

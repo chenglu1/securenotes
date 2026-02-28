@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, BrowserWindow, app } from 'electron'
 import { initDatabase } from './database/connection'
 import { NotesRepository } from './database/repositories/notes'
 import { TagsRepository } from './database/repositories/tags'
@@ -8,9 +8,39 @@ const notes = new NotesRepository()
 const tags = new TagsRepository()
 const attachments = new AttachmentsRepository()
 
-export async function registerIpcHandlers() {
+export async function registerIpcHandlers(win: BrowserWindow | null) {
   // Initialize database first (async for sql.js WASM loading)
   await initDatabase()
+
+  // ── Window Control ─────────────────────────────────────
+  ipcMain.handle('window:minimize', () => {
+    win?.minimize()
+  })
+  
+  ipcMain.handle('window:maximize', () => {
+    if (win?.isMaximized()) {
+      win.unmaximize()
+    } else {
+      win?.maximize()
+    }
+  })
+  
+  ipcMain.handle('window:close', () => {
+    win?.close()
+  })
+  
+  ipcMain.handle('window:hide', () => {
+    win?.hide()
+  })
+  
+  ipcMain.handle('window:show', () => {
+    win?.show()
+    win?.focus()
+  })
+
+  ipcMain.handle('app:quit', () => {
+    app.quit()
+  })
 
   // ── Notes ──────────────────────────────────────────────
   ipcMain.handle('notes:getAll', () => notes.getAll())
@@ -19,6 +49,9 @@ export async function registerIpcHandlers() {
   ipcMain.handle('notes:update', (_e, id: string, data: { title?: string; content?: string }) => notes.update(id, data))
   ipcMain.handle('notes:delete', (_e, id: string) => notes.delete(id))
   ipcMain.handle('notes:search', (_e, query: string) => notes.search(query))
+  ipcMain.handle('notes:getDirty', () => notes.getDirty())
+  ipcMain.handle('notes:markSynced', (_e, id: string, syncVersion: number) => notes.markSynced(id, syncVersion))
+  ipcMain.handle('notes:upsertFromCloud', (_e, cloudNote: any) => notes.upsertFromCloud(cloudNote))
 
   // ── Tags ───────────────────────────────────────────────
   ipcMain.handle('tags:getAll', () => tags.getAll())

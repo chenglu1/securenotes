@@ -11,6 +11,11 @@ const api = {
     ipcRenderer.invoke('notes:update', id, data),
   deleteNote: (id: string) => ipcRenderer.invoke('notes:delete', id),
   searchNotes: (query: string) => ipcRenderer.invoke('notes:search', query),
+  getDirtyNotes: () => ipcRenderer.invoke('notes:getDirty'),
+  markNoteSynced: (id: string, syncVersion: number) =>
+    ipcRenderer.invoke('notes:markSynced', id, syncVersion),
+  upsertNoteFromCloud: (cloudNote: any) =>
+    ipcRenderer.invoke('notes:upsertFromCloud', cloudNote),
 
   // ── Tags ───────────────────────────────────────────────
   getTags: () => ipcRenderer.invoke('tags:getAll'),
@@ -33,9 +38,20 @@ const api = {
   openAttachment: (id: string) =>
     ipcRenderer.invoke('attachments:open', id),
 
+  // ── Window Control ─────────────────────────────────────
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  maximizeWindow: () => ipcRenderer.invoke('window:maximize'),
+  closeWindow: () => ipcRenderer.invoke('window:close'),
+  hideWindow: () => ipcRenderer.invoke('window:hide'),
+  showWindow: () => ipcRenderer.invoke('window:show'),
+  quitApp: () => ipcRenderer.invoke('app:quit'),
+
   // ── App Events ─────────────────────────────────────────
   onMainProcessMessage: (callback: (message: string) => void) => {
     ipcRenderer.on('main-process-message', (_event, message) => callback(message))
+  },
+  onCreateNewNote: (callback: () => void) => {
+    ipcRenderer.on('create-new-note', () => callback())
   },
 }
 
