@@ -23,56 +23,55 @@ interface EditorToolbarProps {
 }
 
 export function EditorToolbar({ editor }: EditorToolbarProps) {
+  // Tiptap v3: ChainedCommands 类型不包含扩展命令，用辅助函数统一断言
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const chain = () => editor.chain().focus() as any
+
   const addLink = () => {
     const previousUrl = editor.getAttributes('link').href
     const url = window.prompt('输入链接 URL:', previousUrl)
 
     if (url === null) return
     if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+      chain().extendMarkRange('link').unsetLink().run()
       return
     }
 
-    editor
-      .chain()
-      .focus()
-      .extendMarkRange('link')
-      .setLink({ href: url })
-      .run()
+    chain().extendMarkRange('link').setLink({ href: url }).run()
   }
 
   return (
     <div className="flex items-center gap-0.5 px-xl py-sm border-b border-border bg-bg-secondary flex-wrap">
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleBold().run()}
+        onClick={() => chain().toggleBold().run()}
         isActive={editor.isActive('bold')}
         title="加粗"
       >
         <Bold size={16} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleItalic().run()}
+        onClick={() => chain().toggleItalic().run()}
         isActive={editor.isActive('italic')}
         title="斜体"
       >
         <Italic size={16} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleStrike().run()}
+        onClick={() => chain().toggleStrike().run()}
         isActive={editor.isActive('strike')}
         title="删除线"
       >
         <Strikethrough size={16} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleCode().run()}
+        onClick={() => chain().toggleCode().run()}
         isActive={editor.isActive('code')}
         title="行内代码"
       >
         <Code size={16} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHighlight().run()}
+        onClick={() => chain().toggleHighlight().run()}
         isActive={editor.isActive('highlight')}
         title="高亮"
       >
@@ -82,21 +81,21 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
       <div className="w-px h-5 bg-border mx-xs" />
 
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+        onClick={() => chain().toggleHeading({ level: 1 }).run()}
         isActive={editor.isActive('heading', { level: 1 })}
         title="标题 1"
       >
         <Heading1 size={16} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+        onClick={() => chain().toggleHeading({ level: 2 }).run()}
         isActive={editor.isActive('heading', { level: 2 })}
         title="标题 2"
       >
         <Heading2 size={16} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+        onClick={() => chain().toggleHeading({ level: 3 }).run()}
         isActive={editor.isActive('heading', { level: 3 })}
         title="标题 3"
       >
@@ -106,21 +105,21 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
       <div className="w-px h-5 bg-border mx-xs" />
 
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        onClick={() => chain().toggleBulletList().run()}
         isActive={editor.isActive('bulletList')}
         title="无序列表"
       >
         <List size={16} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        onClick={() => chain().toggleOrderedList().run()}
         isActive={editor.isActive('orderedList')}
         title="有序列表"
       >
         <ListOrdered size={16} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleTaskList().run()}
+        onClick={() => chain().toggleTaskList().run()}
         isActive={editor.isActive('taskList')}
         title="任务列表"
       >
@@ -130,14 +129,14 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
       <div className="w-px h-5 bg-border mx-xs" />
 
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        onClick={() => chain().toggleBlockquote().run()}
         isActive={editor.isActive('blockquote')}
         title="引用"
       >
         <Quote size={16} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() => editor.chain().focus().setHorizontalRule().run()}
+        onClick={() => chain().setHorizontalRule().run()}
         title="分割线"
       >
         <Minus size={16} />
@@ -149,15 +148,17 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
       <div className="w-px h-5 bg-border mx-xs" />
 
       <ToolbarButton
-        onClick={() => editor.chain().focus().undo().run()}
-        disabled={!editor.can().undo()}
+        onClick={() => chain().undo().run()}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        disabled={!(editor.can() as any).undo()}
         title="撤销"
       >
         <Undo size={16} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() => editor.chain().focus().redo().run()}
-        disabled={!editor.can().redo()}
+        onClick={() => chain().redo().run()}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        disabled={!(editor.can() as any).redo()}
         title="重做"
       >
         <Redo size={16} />
