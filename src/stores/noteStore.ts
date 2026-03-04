@@ -293,6 +293,11 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
       console.log('✅ Pull completed')
     } catch (err) {
+      // 网络不可达（未启动同步服务器）时静默忽略，不影响本地功能
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        console.warn('⚠️ Sync server not reachable, skipping pull.')
+        return
+      }
       console.error('❌ Pull failed:', err)
       throw err
     }
