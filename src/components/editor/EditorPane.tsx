@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ConfigurableTiptapEditor } from '@chenglu1/xeditor-editor'
+import { ConfigurableTiptapEditor, type EditorUpdateEvent } from '@chenglu1/xeditor-editor'
+import '@chenglu1/xeditor-editor/styles.css'
 import { useNoteStore } from '../../stores/noteStore'
-import { uploadImage } from '../../services/uploadService'
 import { FileText, Trash2 } from 'lucide-react'
 
 export function EditorPane() {
@@ -71,22 +71,10 @@ export function EditorPane() {
     []
   )
 
-  // 图片上传处理函数
+  // 图片上传处理函数（TODO: 接入真实上传服务）
   const handleImageUpload = useCallback(
-    async (
-      file: File,
-      onProgress?: (event: { progress: number }) => void,
-      abortSignal?: AbortSignal
-    ): Promise<string> => {
-      try {
-        // 使用上传服务
-        const imageUrl = await uploadImage(file, onProgress, abortSignal)
-        return imageUrl
-      } catch (error) {
-        console.error('图片上传失败:', error)
-        // 可以在这里显示错误提示
-        throw error
-      }
+    async (_file: File, _context?: { onProgress?: (event: { progress: number }) => void; abortSignal?: AbortSignal }): Promise<string> => {
+      throw new Error('图片上传服务未配置，请接入实际的上传接口')
     },
     []
   )
@@ -129,13 +117,18 @@ export function EditorPane() {
       <div className="flex-1 overflow-y-auto px-xl">
         <ConfigurableTiptapEditor
           value={content}
-          contentType="html"
+          valueType="markdown"
           placeholder="开始写点什么..."
-          onChange={handleContentChange}
+          onUpdate={(event: EditorUpdateEvent) => {
+            if (event.valueType === 'markdown') {
+              handleContentChange(event.value as string)
+            }
+          }}
           showToolbar={true}
           uploadHandler={handleImageUpload}
           maxFileSize={5 * 1024 * 1024}
-          minHeight="100%"
+          minHeight="400px"
+          compact={true}
         />
       </div>
     </div>

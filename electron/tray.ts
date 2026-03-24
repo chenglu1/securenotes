@@ -101,54 +101,6 @@ function showWindow(win: BrowserWindow | null) {
 }
 
 /**
- * 更新托盘菜单（例如根据应用状态动态更新）
- */
-export function updateTrayMenu(win: BrowserWindow | null, options?: { noteCount?: number }) {
-  if (!tray || !win) return
-
-  const noteCountLabel = options?.noteCount !== undefined ? ` (${options.noteCount} 篇笔记)` : ''
-
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: `显示主窗口${noteCountLabel}`,
-      click: () => showWindow(win),
-    },
-    {
-      type: 'separator',
-    },
-    {
-      label: '新建笔记',
-      accelerator: 'CmdOrCtrl+N',
-      click: () => {
-        showWindow(win)
-        win?.webContents.send('create-new-note')
-      },
-    },
-    {
-      type: 'separator',
-    },
-    {
-      label: '关于 SecureNotes',
-      click: () => {
-        showWindow(win)
-      },
-    },
-    {
-      type: 'separator',
-    },
-    {
-      label: '退出',
-      accelerator: 'CmdOrCtrl+Q',
-      click: () => {
-        app.quit()
-      },
-    },
-  ])
-
-  tray.setContextMenu(contextMenu)
-}
-
-/**
  * 销毁托盘（应用退出时调用）
  */
 export function destroyTray() {
@@ -157,3 +109,4 @@ export function destroyTray() {
     tray = null
   }
 }
+
