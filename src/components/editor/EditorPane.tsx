@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ConfigurableTiptapEditor, type EditorUpdateEvent } from '@chenglu1/xeditor-editor'
+import { ConfigurableTiptapEditor } from '@chenglu1/xeditor-editor'
 import '@chenglu1/xeditor-editor/styles.css'
 import { useNoteStore } from '../../stores/noteStore'
 import { FileText, Trash2 } from 'lucide-react'
@@ -71,13 +71,12 @@ export function EditorPane() {
     []
   )
 
-  // 图片上传处理函数（TODO: 接入真实上传服务）
-  const handleImageUpload = useCallback(
-    async (_file: File, _context?: { onProgress?: (event: { progress: number }) => void; abortSignal?: AbortSignal }): Promise<string> => {
-      throw new Error('图片上传服务未配置，请接入实际的上传接口')
-    },
-    []
-  )
+  // 图片上传处理（TODO: 接入真实上传服务）
+  // 使用 as any 兼容 xeditor-editor 不同版本的类型签名
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleImageUpload = useCallback(async (_file: File, ..._args: any[]): Promise<string> => {
+    throw new Error('图片上传服务未配置，请接入实际的上传接口')
+  }, []) as any
 
   // No note selected
   if (!selectedNote) {
@@ -119,7 +118,7 @@ export function EditorPane() {
           value={content}
           valueType="markdown"
           placeholder="开始写点什么..."
-          onUpdate={(event: EditorUpdateEvent) => {
+          onUpdate={(event) => {
             if (event.valueType === 'markdown') {
               handleContentChange(event.value as string)
             }

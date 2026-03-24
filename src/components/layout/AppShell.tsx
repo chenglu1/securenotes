@@ -7,7 +7,7 @@ interface AppShellProps {
 
 export function AppShell({ onShowAuth }: AppShellProps) {
   return (
-    <div className="flex h-screen overflow-hidden bg-bg-primary">
+    <div className="dark flex h-screen overflow-hidden bg-bg-primary">
       <div className="titlebar-drag" />
       <Sidebar onShowAuth={onShowAuth} />
       <EditorPane />
