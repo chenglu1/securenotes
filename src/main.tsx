@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { installMockApi } from './services/mockApi'
 import { App } from './App'
 import './styles/index.css'
-import 'katex/dist/katex.min.css'
+
 
 
 // Install mock API for browser-based development (no-op in Electron)
