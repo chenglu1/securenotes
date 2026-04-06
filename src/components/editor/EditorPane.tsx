@@ -37,6 +37,18 @@ export function EditorPane() {
   const latestTitleRef = useRef('')
   const latestContentRef = useRef('')
 
+  const hasNoteChanged = useCallback(
+    (noteId: string, nextTitle: string, nextContent: string) => {
+      const note = notes.find((item) => item.id === noteId)
+      if (!note) {
+        return true
+      }
+
+      return note.title !== nextTitle || (note.content || '') !== nextContent
+    },
+    [notes],
+  )
+
   const flushPendingEdits = useCallback(
     (noteId = activeNoteIdRef.current) => {
       if (!noteId) {
@@ -58,12 +70,16 @@ export function EditorPane() {
         contentDebounceRef.current = undefined
       }
 
+      if (!hasNoteChanged(noteId, latestTitleRef.current, latestContentRef.current)) {
+        return
+      }
+
       void updateNote(noteId, {
         title: latestTitleRef.current,
         content: latestContentRef.current,
       })
     },
-    [updateNote]
+    [hasNoteChanged, updateNote]
   )
 
   const handleCreateFromEmpty = useCallback(async () => {
@@ -103,6 +119,8 @@ export function EditorPane() {
 
   const handleContentChange = useCallback(
     (newContent: string) => {
+      if (newContent === latestContentRef.current) return
+
       setContent(newContent)
       latestContentRef.current = newContent
       if (!selectedNoteId) return
@@ -119,6 +137,8 @@ export function EditorPane() {
   const handleTitleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const newTitle = e.target.value
+      if (newTitle === latestTitleRef.current) return
+
       setTitle(newTitle)
       latestTitleRef.current = newTitle
       if (!selectedNoteId) return
@@ -189,12 +209,6 @@ export function EditorPane() {
   if (!selectedNote) {
     return (
       <section className="editor-panel">
-        <div className="editor-topbar editor-topbar--minimal editor-topbar--ghost app-region-drag">
-          <div className="editor-topbar__left">
-            <span className="editor-topbar__eyebrow">文档编辑页</span>
-          </div>
-        </div>
-
         <div className="editor-body editor-body--empty editor-body--notion-empty">
           <div className="empty-stage empty-stage--minimal">
             <Typography.Title level={2} className="empty-stage__title">
@@ -220,12 +234,6 @@ export function EditorPane() {
 
   return (
     <section className="editor-panel">
-      <div className="editor-topbar editor-topbar--minimal editor-topbar--ghost app-region-drag">
-        <div className="editor-topbar__left">
-          <span className="editor-topbar__eyebrow">文档编辑页</span>
-        </div>
-      </div>
-
       <div className="editor-body">
         <div className="editor-content-wrap">
           <div className="editor-header editor-header--simple">
@@ -278,11 +286,12 @@ export function EditorPane() {
 
           <div className="editor-surface editor-surface--simple">
             <ConfigurableTiptapEditor
+              key={selectedNote.id}
               value={content}
               valueType="markdown"
               placeholder="开始写点什么..."
               onUpdate={(event) => {
-                if (event.valueType === 'markdown') {
+                if (event.valueType === 'markdown' && event.source === 'user') {
                   handleContentChange(event.value as string)
                 }
               }}

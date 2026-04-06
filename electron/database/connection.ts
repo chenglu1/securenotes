@@ -64,7 +64,11 @@ function runMigrations(db: Database) {
       updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
       deleted_at    TEXT,
       sync_version  INTEGER DEFAULT 0,
-      is_dirty      INTEGER DEFAULT 1
+      is_dirty      INTEGER DEFAULT 1,
+      last_synced_title TEXT,
+      last_synced_content TEXT,
+      last_synced_deleted_at TEXT,
+      last_synced_version INTEGER DEFAULT 0
     );
   `)
 
@@ -74,7 +78,33 @@ function runMigrations(db: Database) {
     )
   }
 
+  if (!hasColumn(db, 'notes', 'last_synced_title')) {
+    db.run(`ALTER TABLE notes ADD COLUMN last_synced_title TEXT;`)
+  }
+
+  if (!hasColumn(db, 'notes', 'last_synced_content')) {
+    db.run(`ALTER TABLE notes ADD COLUMN last_synced_content TEXT;`)
+  }
+
+  if (!hasColumn(db, 'notes', 'last_synced_deleted_at')) {
+    db.run(`ALTER TABLE notes ADD COLUMN last_synced_deleted_at TEXT;`)
+  }
+
+  if (!hasColumn(db, 'notes', 'last_synced_version')) {
+    db.run(`ALTER TABLE notes ADD COLUMN last_synced_version INTEGER DEFAULT 0;`)
+  }
+
   db.run(`CREATE INDEX IF NOT EXISTS idx_notes_owner_user_id ON notes(owner_user_id);`)
+
+  db.run(`
+    UPDATE notes
+    SET
+      last_synced_title = title,
+      last_synced_content = content,
+      last_synced_deleted_at = deleted_at,
+      last_synced_version = COALESCE(sync_version, 0)
+    WHERE is_dirty = 0 AND COALESCE(sync_version, 0) > 0 AND COALESCE(last_synced_version, 0) = 0;
+  `)
 
   const currentUserId = getAuthSession()?.userId
   if (currentUserId) {

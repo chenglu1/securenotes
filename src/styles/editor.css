@@ -2,32 +2,11 @@
   background: #ffffff;
 }
 
-.editor-topbar--minimal {
-  padding: 22px 44px 0;
-}
-
-.editor-topbar--ghost {
-  padding-bottom: 6px;
-}
-
-.editor-topbar__left,
 .editor-header--simple,
 .editor-meta-line,
 .editor-actions--simple {
   display: flex;
   align-items: center;
-}
-
-.editor-topbar__left {
-  gap: 8px;
-}
-
-.editor-topbar__eyebrow {
-  color: #9b978f !important;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .editor-body {
@@ -234,7 +213,6 @@
 }
 
 @media (max-width: 1100px) {
-  .editor-topbar--minimal,
   .editor-body {
     padding-left: 28px;
     padding-right: 28px;
@@ -249,7 +227,6 @@
 }
 
 @media (max-width: 720px) {
-  .editor-topbar--minimal,
   .editor-body {
     padding-left: 18px;
     padding-right: 18px;

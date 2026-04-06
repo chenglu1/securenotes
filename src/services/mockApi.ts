@@ -12,6 +12,10 @@ interface Note {
   deleted_at: string | null
   sync_version: number
   is_dirty: number
+  last_synced_title?: string | null
+  last_synced_content?: string | null
+  last_synced_deleted_at?: string | null
+  last_synced_version?: number
 }
 
 type StoredNote = Note & { owner_user_id: string }
@@ -49,6 +53,10 @@ export const mockApi = {
       deleted_at: null,
       sync_version: 0,
       is_dirty: 1,
+      last_synced_title: null,
+      last_synced_content: null,
+      last_synced_deleted_at: null,
+      last_synced_version: 0,
     }
     notes.unshift(note)
     return note
@@ -56,8 +64,15 @@ export const mockApi = {
   updateNote: async (id: string, data: { title?: string; content?: string }) => {
     const note = notes.find((n) => n.id === id && n.owner_user_id === getCurrentScope())
     if (!note) return undefined
-    if (data.title !== undefined) note.title = data.title
-    if (data.content !== undefined) note.content = data.content
+
+    const nextTitle = data.title ?? note.title
+    const nextContent = data.content ?? note.content
+    if (nextTitle === note.title && nextContent === note.content) {
+      return note
+    }
+
+    note.title = nextTitle
+    note.content = nextContent
     note.updated_at = new Date().toISOString()
     note.is_dirty = 1
     return note
@@ -85,6 +100,10 @@ export const mockApi = {
     if (!note) return
     note.is_dirty = 0
     note.sync_version = syncVersion
+    note.last_synced_version = syncVersion
+    note.last_synced_title = note.title
+    note.last_synced_content = note.content
+    note.last_synced_deleted_at = note.deleted_at
   },
   claimLocalNotes: async (userId: string) => {
     let count = 0
@@ -120,6 +139,10 @@ export const mockApi = {
         deleted_at: cloudNote.deletedAt ?? null,
         sync_version: cloudNote.syncVersion,
         is_dirty: 0,
+        last_synced_title: cloudNote.title,
+        last_synced_content: cloudNote.content,
+        last_synced_deleted_at: cloudNote.deletedAt ?? null,
+        last_synced_version: cloudNote.syncVersion,
       }
       notes.unshift(insertedNote)
       return insertedNote
@@ -135,6 +158,10 @@ export const mockApi = {
     existing.deleted_at = cloudNote.deletedAt ?? null
     existing.sync_version = cloudNote.syncVersion
     existing.is_dirty = 0
+    existing.last_synced_title = cloudNote.title
+    existing.last_synced_content = cloudNote.content
+    existing.last_synced_deleted_at = cloudNote.deletedAt ?? null
+    existing.last_synced_version = cloudNote.syncVersion
     return existing
   },
   getTags: async () => tags,

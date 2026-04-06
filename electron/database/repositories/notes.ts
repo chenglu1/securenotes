@@ -66,6 +66,10 @@ export class NotesRepository {
     const title = data.title ?? note.title
     const content = data.content ?? note.content
 
+    if (title === note.title && content === note.content) {
+      return note
+    }
+
     db.run(
       `UPDATE notes SET title = ?, content = ?, updated_at = ?, is_dirty = 1 WHERE id = ? AND owner_user_id = ?`,
       [title, content, now, id, this.getCurrentScope()]
@@ -125,8 +129,15 @@ export class NotesRepository {
   markSynced(id: string, syncVersion: number): void {
     const db = getDatabase()
     db.run(
-      `UPDATE notes SET is_dirty = 0, sync_version = ? WHERE id = ? AND owner_user_id = ?`,
-      [syncVersion, id, this.getCurrentScope()]
+      `UPDATE notes
+       SET is_dirty = 0,
+           sync_version = ?,
+           last_synced_version = ?,
+           last_synced_title = title,
+           last_synced_content = content,
+           last_synced_deleted_at = deleted_at
+       WHERE id = ? AND owner_user_id = ?`,
+      [syncVersion, syncVersion, id, this.getCurrentScope()]
     )
     saveDatabase()
   }
@@ -175,8 +186,22 @@ export class NotesRepository {
     if (!localNote) {
       // Insert new note from cloud
       db.run(
-        `INSERT INTO notes (id, owner_user_id, title, content, sync_version, is_dirty, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+        `INSERT INTO notes (
+           id,
+           owner_user_id,
+           title,
+           content,
+           sync_version,
+           is_dirty,
+           created_at,
+           updated_at,
+           deleted_at,
+           last_synced_title,
+           last_synced_content,
+           last_synced_deleted_at,
+           last_synced_version
+         )
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
         [
           cloudNote.id,
           scope,
@@ -186,6 +211,10 @@ export class NotesRepository {
           cloudNote.createdAt,
           cloudNote.updatedAt,
           cloudNote.deletedAt || null,
+          cloudNote.title,
+          cloudNote.content,
+          cloudNote.deletedAt || null,
+          cloudNote.syncVersion,
         ]
       )
     } else {
@@ -196,15 +225,23 @@ export class NotesRepository {
             title = ?,
             content = ?,
             sync_version = ?,
+            last_synced_version = ?,
+            last_synced_title = ?,
+            last_synced_content = ?,
             is_dirty = 0,
             updated_at = ?,
-            deleted_at = ?
+            deleted_at = ?,
+            last_synced_deleted_at = ?
            WHERE id = ? AND owner_user_id = ?`,
           [
             cloudNote.title,
             cloudNote.content,
             cloudNote.syncVersion,
+            cloudNote.syncVersion,
+            cloudNote.title,
+            cloudNote.content,
             cloudNote.updatedAt,
+            cloudNote.deletedAt || null,
             cloudNote.deletedAt || null,
             cloudNote.id,
             scope,

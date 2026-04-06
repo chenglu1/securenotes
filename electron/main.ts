@@ -1,7 +1,39 @@
 // Electron Main Process
+import { cpSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { app, BrowserWindow, shell } from 'electron'
 import { createTray, destroyTray } from './tray'
+
+const CANONICAL_USER_DATA_DIR = 'securenotes'
+const LEGACY_USER_DATA_DIRS = ['electron-vite-boilerplate']
+
+function initializeUserDataPath() {
+  const appDataDir = app.getPath('appData')
+  const canonicalUserDataPath = join(appDataDir, CANONICAL_USER_DATA_DIR)
+
+  if (!existsSync(canonicalUserDataPath)) {
+    mkdirSync(canonicalUserDataPath, { recursive: true })
+  }
+
+  for (const legacyDirName of LEGACY_USER_DATA_DIRS) {
+    const legacyUserDataPath = join(appDataDir, legacyDirName)
+    if (!existsSync(legacyUserDataPath)) {
+      continue
+    }
+
+    for (const entry of ['securenotes.db', 'secure-store.bin', 'secure-store.json', 'attachments']) {
+      const sourcePath = join(legacyUserDataPath, entry)
+      const targetPath = join(canonicalUserDataPath, entry)
+      if (existsSync(sourcePath) && !existsSync(targetPath)) {
+        cpSync(sourcePath, targetPath, { recursive: true })
+      }
+    }
+  }
+
+  app.setPath('userData', canonicalUserDataPath)
+}
+
+initializeUserDataPath()
 
 // These must be set AFTER app module is available but they reference
 // `__dirname` which is available at module load

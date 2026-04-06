@@ -1,7 +1,11 @@
-const REMOTE_API_BASE_URL = 'http://localhost:3000/api'
+const PRODUCTION_API_BASE_URL = 'https://securenotes-server.onrender.com/api'
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '')
+}
+
+function hasElectronBridge(): boolean {
+  return typeof window !== 'undefined' && typeof window.api !== 'undefined'
 }
 
 export function getApiBaseUrl(): string {
@@ -10,11 +14,15 @@ export function getApiBaseUrl(): string {
     return trimTrailingSlash(configuredBaseUrl)
   }
 
+  if (hasElectronBridge()) {
+    return PRODUCTION_API_BASE_URL
+  }
+
   if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
     return '/api'
   }
 
-  return REMOTE_API_BASE_URL
+  return PRODUCTION_API_BASE_URL
 }
 
 export function apiUrl(path: string): string {

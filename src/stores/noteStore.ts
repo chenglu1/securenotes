@@ -11,6 +11,10 @@ export interface Note {
   deleted_at: string | null
   sync_version: number
   is_dirty: number
+  last_synced_title?: string | null
+  last_synced_content?: string | null
+  last_synced_deleted_at?: string | null
+  last_synced_version?: number
 }
 
 export interface Tag {
@@ -58,6 +62,15 @@ type PushNoteResult =
   | { status: 'conflict'; note?: CloudNote; message: string }
   | { status: 'error'; message: string }
 
+async function clearAuthForReauth(userId: string | null) {
+  await window.api.clearAuthSession()
+  if (userId) {
+    await window.api.clearEncryptionKey(userId)
+  }
+  localStorage.removeItem('auth_token')
+  localStorage.removeItem('user_id')
+}
+
 function toLocalCloudNote(cloudNote: CloudNote) {
   return {
     id: cloudNote.id,
@@ -96,6 +109,35 @@ function decodeJwtEmail(token: string): string | null {
   }
 }
 
+function parseTimestamp(value: string | null | undefined): number | null {
+  if (!value) {
+    return null
+  }
+
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
+function hasSyncedSnapshot(note: Note): boolean {
+  return (note.last_synced_version ?? 0) > 0
+}
+
+function isCloudSnapshotEqualToLocalSnapshot(
+  note: Note,
+  cloudSnapshot: { title: string; content: string; deletedAt: string | null; syncVersion: number },
+): boolean {
+  return (
+    (note.last_synced_version ?? 0) === cloudSnapshot.syncVersion &&
+    (note.last_synced_title ?? null) === cloudSnapshot.title &&
+    (note.last_synced_content ?? null) === cloudSnapshot.content &&
+    (note.last_synced_deleted_at ?? null) === cloudSnapshot.deletedAt
+  )
+}
+
+function hasMeaningfulLocalContent(note: Note): boolean {
+  return note.title.trim().length > 0 || note.content.trim().length > 0
+}
+
 async function applyCloudNoteToLocal(cloudNote: CloudNote, encryptionKey: string, force = false) {
   const decryptedTitle = await decryptText(cloudNote.encryptedTitle, encryptionKey)
   const decryptedContent = await decryptText(cloudNote.encryptedContent, encryptionKey)
@@ -114,6 +156,86 @@ async function applyCloudNoteToLocal(cloudNote: CloudNote, encryptionKey: string
     content: decryptedContent,
     deletedAt: cloudNote.deletedAt ?? null,
   }
+}
+
+async function reconcileDirtyNotesWithCloud(cloudNotes: CloudNote[], encryptionKey: string): Promise<{ alignedCount: number; restoredCount: number }> {
+  const cloudNotesById = new Map(cloudNotes.map((cloudNote) => [cloudNote.id, cloudNote]))
+  const dirtyNotes = await window.api.getDirtyNotes()
+  let alignedCount = 0
+  let restoredCount = 0
+
+  for (const localNote of dirtyNotes) {
+    const cloudNote = cloudNotesById.get(localNote.id)
+    if (!cloudNote) {
+      continue
+    }
+
+    const decryptedTitle = await decryptText(cloudNote.encryptedTitle, encryptionKey)
+    const decryptedContent = await decryptText(cloudNote.encryptedContent, encryptionKey)
+    const cloudDeletedAt = cloudNote.deletedAt ?? null
+    const cloudSnapshot = {
+      title: decryptedTitle,
+      content: decryptedContent,
+      deletedAt: cloudDeletedAt,
+      syncVersion: cloudNote.syncVersion,
+    }
+
+    if (
+      localNote.title === decryptedTitle &&
+      localNote.content === decryptedContent &&
+      (localNote.deleted_at ?? null) === cloudDeletedAt
+    ) {
+      await applyCloudNoteToLocal(cloudNote, encryptionKey, true)
+      alignedCount += 1
+      continue
+    }
+
+    if (hasSyncedSnapshot(localNote) && isCloudSnapshotEqualToLocalSnapshot(localNote, cloudSnapshot)) {
+      continue
+    }
+
+    if (!hasSyncedSnapshot(localNote) && localNote.sync_version === cloudNote.syncVersion) {
+      const shouldRestoreCloudDirectly =
+        (localNote.deleted_at && !cloudDeletedAt) ||
+        (localNote.content.trim().length === 0 && decryptedContent.trim().length > 0)
+
+      if (shouldRestoreCloudDirectly) {
+        await applyCloudNoteToLocal(cloudNote, encryptionKey, true)
+        restoredCount += 1
+        continue
+      }
+
+      if (hasMeaningfulLocalContent(localNote)) {
+        await window.api.createNote({
+          title: buildConflictCopyTitle(localNote.title),
+          content: localNote.content,
+        })
+      }
+
+      await applyCloudNoteToLocal(cloudNote, encryptionKey, true)
+      restoredCount += 1
+      continue
+    }
+
+    if (localNote.deleted_at && !cloudDeletedAt) {
+      const localUpdatedAt = parseTimestamp(localNote.updated_at)
+      const cloudUpdatedAt = parseTimestamp(cloudNote.updatedAt)
+
+      if (localUpdatedAt !== null && cloudUpdatedAt !== null && localUpdatedAt > cloudUpdatedAt) {
+        continue
+      }
+
+      try {
+        await applyCloudNoteToLocal(cloudNote, encryptionKey, true)
+        restoredCount += 1
+        console.warn(`ℹ️ Restored cloud note ${cloudNote.id} because a hidden local deletion would have overwritten it.`)
+      } catch (restoreError) {
+        console.error(`❌ Failed to restore cloud note ${cloudNote.id}:`, restoreError)
+      }
+    }
+  }
+
+  return { alignedCount, restoredCount }
 }
 
 async function pushNoteToCloud(note: Note, token: string, encryptionKey: string): Promise<PushNoteResult> {
@@ -278,12 +400,24 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   updateNote: async (id, data) => {
     try {
-      await window.api.updateNote(id, data)
+      const currentNote = get().notes.find((note) => note.id === id)
+      if (!currentNote) {
+        return
+      }
+
+      const nextTitle = data.title ?? currentNote.title
+      const nextContent = data.content ?? currentNote.content
+      if (nextTitle === currentNote.title && nextContent === currentNote.content) {
+        return
+      }
+
+      await window.api.updateNote(id, { title: nextTitle, content: nextContent })
+
       // Update local state without full reload for snappiness
       set((state) => ({
         notes: state.notes.map((n) =>
           n.id === id
-            ? { ...n, ...data, updated_at: new Date().toISOString(), is_dirty: 1 }
+            ? { ...n, title: nextTitle, content: nextContent, updated_at: new Date().toISOString(), is_dirty: 1 }
             : n
         ),
         syncStatus: 'idle',
@@ -489,12 +623,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   pullFromCloud: async () => {
     const { token, encryptionKey, userId } = get()
     if (!token || !encryptionKey) {
-      await window.api.clearAuthSession()
-      if (userId) {
-        await window.api.clearEncryptionKey(userId)
-      }
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('user_id')
+      await clearAuthForReauth(userId)
       set({
         isAuthenticated: false,
         userId: null,
@@ -516,6 +645,22 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
           'Authorization': `Bearer ${token}`,
         },
       })
+
+      if (response.status === 401 || response.status === 403) {
+        await clearAuthForReauth(userId)
+        set({
+          notes: [],
+          selectedNoteId: null,
+          isAuthenticated: false,
+          userId: null,
+          userEmail: null,
+          token: null,
+          encryptionKey: null,
+          syncStatus: 'reauth-required',
+        })
+        throw new Error('当前登录态属于其他后端环境，请重新登录。')
+      }
+
       const cloudNotes = await readJson<CloudNote[]>(response)
 
       if (!response.ok || !Array.isArray(cloudNotes)) {
@@ -533,6 +678,15 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         }
       }
 
+      const { alignedCount, restoredCount } = await reconcileDirtyNotesWithCloud(cloudNotes, encryptionKey)
+      if (alignedCount > 0) {
+        console.warn(`ℹ️ Cleared ${alignedCount} false local dirty marks that already matched the cloud snapshot.`)
+      }
+
+      if (restoredCount > 0) {
+        console.warn(`⚠️ Prevented ${restoredCount} hidden local deletions from overwriting cloud notes.`)
+      }
+
       console.log('✅ Pull completed')
     } catch (err) {
       // 网络不可达（未启动同步服务器）时静默忽略，不影响本地功能
@@ -548,12 +702,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   syncToCloud: async () => {
     const { token, encryptionKey, userId } = get()
     if (!token || !encryptionKey) {
-      await window.api.clearAuthSession()
-      if (userId) {
-        await window.api.clearEncryptionKey(userId)
-      }
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('user_id')
+      await clearAuthForReauth(userId)
       set({
         isAuthenticated: false,
         userId: null,

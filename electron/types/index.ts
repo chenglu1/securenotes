@@ -9,6 +9,10 @@ export interface Note {
   deleted_at: string | null
   sync_version: number
   is_dirty: number
+  last_synced_title?: string | null
+  last_synced_content?: string | null
+  last_synced_deleted_at?: string | null
+  last_synced_version?: number
 }
 
 export interface Tag {
