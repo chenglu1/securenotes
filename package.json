@@ -40,7 +40,9 @@
     "vite-plugin-electron-renderer": "^0.14.6"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.1.1",
     "@chenglu1/xeditor-editor": "^0.0.8",
+    "antd": "^6.3.5",
     "libsodium-wrappers-sumo": "^0.8.2",
     "lucide-react": "^0.575.0",
     "react": "^18.3.1",

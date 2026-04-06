@@ -1,9 +1,63 @@
-import { useCallback, useRef } from 'react'
-import { Search, Plus, FileText, Shield, Cloud, LogIn, LogOut, RefreshCw } from 'lucide-react'
+import {
+  CloudSyncOutlined,
+  LoginOutlined,
+  LogoutOutlined,
+  PlusOutlined,
+  SearchOutlined,
+  SyncOutlined,
+  UserOutlined,
+} from '@ant-design/icons'
+import { Avatar, Button, Empty, Input, Typography } from 'antd'
+import { useCallback, useDeferredValue, useMemo } from 'react'
 import { useNoteStore } from '../../stores/noteStore'
 
 interface SidebarProps {
   onShowAuth: () => void
+}
+
+function formatRelativeTime(dateStr: string) {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const mins = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+
+  if (mins < 1) return '刚刚修改'
+  if (mins < 60) return `${mins} 分钟前`
+  if (hours < 24) return `${hours} 小时前`
+  if (days < 7) return `${days} 天前`
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+}
+
+function getPreview(content: string) {
+  if (!content) return '空白页，适合开始新的想法。'
+
+  const text = content.replace(/<[^>]*>/g, '').replace(/[{}[\]"]/g, '').trim()
+  return text.substring(0, 96) || '空白页，适合开始新的想法。'
+}
+
+function getSearchableText(note: { title: string; content: string }) {
+  return `${note.title} ${note.content.replace(/<[^>]*>/g, ' ').replace(/[{}[\]"]/g, ' ')}`.toLowerCase()
+}
+
+function getWorkspaceName(userEmail: string | null, userId: string | null) {
+  if (userEmail) {
+    const localName = userEmail.split('@')[0]?.replace(/[._-]+/g, ' ').trim()
+    return `${localName || '我的'}工作空间`
+  }
+
+  return userId ? '已连接工作空间' : '本地工作空间'
+}
+
+function getAvatarText(userEmail: string | null, userId: string | null) {
+  const seed = (userEmail?.split('@')[0] ?? userId ?? '').trim()
+  const readableChar = Array.from(seed).find((char) => /[A-Za-z\u4e00-\u9fa5]/.test(char))
+  return readableChar ? readableChar.toUpperCase() : null
 }
 
 export function Sidebar({ onShowAuth }: SidebarProps) {
@@ -13,12 +67,14 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
   const setSearchQuery = useNoteStore((s) => s.setSearchQuery)
   const selectNote = useNoteStore((s) => s.selectNote)
   const createNote = useNoteStore((s) => s.createNote)
+  const isLoading = useNoteStore((s) => s.isLoading)
   const isAuthenticated = useNoteStore((s) => s.isAuthenticated)
+  const userId = useNoteStore((s) => s.userId)
+  const userEmail = useNoteStore((s) => s.userEmail)
   const syncStatus = useNoteStore((s) => s.syncStatus)
   const syncToCloud = useNoteStore((s) => s.syncToCloud)
   const logout = useNoteStore((s) => s.logout)
-
-  const searchRef = useRef<HTMLInputElement>(null)
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase())
 
   const handleCreateNote = useCallback(async () => {
     const note = await createNote()
@@ -27,126 +83,204 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
     }
   }, [createNote, selectNote])
 
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
-    const mins = Math.floor(diff / 60000)
-    const hours = Math.floor(diff / 3600000)
-    const days = Math.floor(diff / 86400000)
+  const visibleNotes = useMemo(() => {
+    if (!deferredSearchQuery) {
+      return notes
+    }
 
-    if (mins < 1) return '刚刚'
-    if (mins < 60) return `${mins} 分钟前`
-    if (hours < 24) return `${hours} 小时前`
-    if (days < 7) return `${days} 天前`
-    return date.toLocaleDateString('zh-CN')
-  }
+    return notes.filter((note) => getSearchableText(note).includes(deferredSearchQuery))
+  }, [notes, deferredSearchQuery])
 
-  const getPreview = (content: string) => {
-    if (!content) return '空笔记'
-    // Strip any HTML/JSON and get plain text preview
-    const text = content.replace(/<[^>]*>/g, '').replace(/[{}[\]"]/g, '').trim()
-    return text.substring(0, 80) || '空笔记'
-  }
+  const dirtyCount = notes.filter((note) => note.is_dirty).length
+  const syncTone = isAuthenticated
+    ? syncStatus === 'error'
+      ? 'error'
+      : syncStatus === 'syncing'
+        ? 'syncing'
+        : dirtyCount > 0
+          ? 'pending'
+          : 'success'
+    : syncStatus === 'reauth-required'
+      ? 'warning'
+      : 'local'
+  const syncLabel = isAuthenticated
+    ? syncStatus === 'syncing'
+      ? '同步中'
+      : dirtyCount > 0
+        ? '未同步'
+      : syncStatus === 'success'
+        ? '已同步'
+        : syncStatus === 'error'
+          ? '同步失败'
+          : '已连接'
+    : syncStatus === 'reauth-required'
+      ? '需重新登录'
+      : '本地模式'
+  const footerText = isAuthenticated
+    ? dirtyCount > 0
+      ? `${dirtyCount} 条改动待同步`
+      : '云端与本地已同步'
+    : syncStatus === 'reauth-required'
+      ? '请重新登录恢复同步'
+      : '当前仅本地保存'
+  const metaText = deferredSearchQuery
+    ? `${visibleNotes.length} 条结果`
+    : dirtyCount > 0
+      ? `${dirtyCount} 未同步`
+      : `${notes.length} 篇笔记`
+  const workspaceName = getWorkspaceName(userEmail, userId)
+  const avatarText = getAvatarText(userEmail, userId)
+  const accountHint = isAuthenticated
+    ? userEmail ?? `账户 ${userId?.slice(0, 8)}...`
+    : '当前为本地访客空间'
+  const workspaceMeta = isAuthenticated
+    ? '仅当前账号可见，本地优先并自动同步。'
+    : '本地优先，登录后再同步到你的云端空间。'
+  const footerHint = isAuthenticated
+    ? '当前列表只显示这个账号下的笔记'
+    : syncStatus === 'reauth-required'
+      ? '重新登录后恢复加密同步'
+      : '登录后可在多端访问同一账号内容'
 
   return (
-    <aside className="w-[280px] min-w-[280px] h-screen bg-bg-secondary border-r border-border flex flex-col overflow-hidden transition-all duration-slow">
-      <div className="pt-[50px] px-lg pb-md flex items-center justify-between">
-        <div className="flex items-center gap-sm font-semibold text-lg bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-          <Shield size={20} />
-          <span>SecureNotes</span>
+    <aside className="sidebar-panel">
+      <div className="sidebar-identity-card">
+        <div className="sidebar-identity-card__head">
+          <Typography.Text className="workspace-switcher__eyebrow">Secure Workspace</Typography.Text>
+          <span className={`sidebar-sync-badge sidebar-sync-badge--${syncTone}`}>
+            {syncLabel}
+          </span>
         </div>
-        <button
-          className="w-9 h-9 p-0 border-none bg-transparent text-text-secondary rounded-md cursor-pointer flex items-center justify-center hover:bg-bg-hover hover:text-text-primary transition-all duration-fast"
-          onClick={handleCreateNote}
-          title="新建笔记"
+
+        <div className="sidebar-identity-card__body">
+          <Avatar
+            size={46}
+            icon={avatarText ? undefined : <UserOutlined />}
+            className={`workspace-avatar ${isAuthenticated ? 'is-live' : 'is-local'}`}
+          >
+            {avatarText}
+          </Avatar>
+
+          <div className="sidebar-identity-card__copy">
+            <Typography.Title level={5} className="workspace-switcher__title">
+              {workspaceName}
+            </Typography.Title>
+            <Typography.Text className="workspace-switcher__meta">{accountHint}</Typography.Text>
+          </div>
+        </div>
+
+        <div className="sidebar-identity-card__foot">
+          <Typography.Paragraph className="sidebar-identity-card__description">
+            {workspaceMeta}
+          </Typography.Paragraph>
+
+          {isAuthenticated ? (
+            <Button
+              type="text"
+              size="small"
+              icon={<LogoutOutlined />}
+              className="sidebar-identity-card__action"
+              onClick={() => void logout()}
+            >
+              退出
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <Input
+        size="large"
+        value={searchQuery}
+        prefix={<SearchOutlined />}
+        placeholder="搜索标题或内容..."
+        className="sidebar-search"
+        allowClear
+        onChange={(event) => setSearchQuery(event.target.value)}
+      />
+
+      <div className="sidebar-primary-actions">
+        <Button
+          type="primary"
+          size="large"
+          icon={<PlusOutlined />}
+          onClick={() => void handleCreateNote()}
         >
-          <Plus size={18} />
-        </button>
+          新建笔记
+        </Button>
+
+        {isAuthenticated ? (
+          <Button
+            size="large"
+            icon={syncStatus === 'syncing' ? <SyncOutlined spin /> : <CloudSyncOutlined />}
+            className="secondary-action"
+            loading={syncStatus === 'syncing'}
+            onClick={() => void syncToCloud()}
+          >
+            同步
+          </Button>
+        ) : (
+          <Button
+            size="large"
+            icon={<LoginOutlined />}
+            className="secondary-action"
+            onClick={onShowAuth}
+          >
+            {syncStatus === 'reauth-required' ? '重新登录' : '登录'}
+          </Button>
+        )}
       </div>
 
-      <div className="px-lg pb-md">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted w-4 h-4 pointer-events-none" size={16} />
-          <input
-            ref={searchRef}
-            type="text"
-            className="w-full py-sm px-md pl-9 bg-bg-tertiary border border-border rounded-md text-text-primary font-sans text-sm transition-all duration-fast focus:outline-none focus:border-primary focus:shadow-glow focus:bg-bg-elevated placeholder:text-text-muted"
-            placeholder="搜索笔记..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+      <div className="list-heading list-heading--simple">
+        <Typography.Text className="list-heading__title">最近笔记</Typography.Text>
+        <Typography.Text className="list-heading__meta">{notes.length > 0 ? metaText : ''}</Typography.Text>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-sm">
-        {notes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-text-muted gap-lg p-2xl text-center animate-[fadeIn_350ms_ease_forwards]" style={{ padding: '32px 16px' }}>
-            <FileText className="w-10 h-10 opacity-30" size={40} />
-            <p className="text-sm max-w-[300px] leading-relaxed">
-              {searchQuery ? '没有找到匹配的笔记' : '还没有笔记，点击 + 创建'}
-            </p>
+      <div className="notes-scroll">
+        {visibleNotes.length === 0 ? (
+          <div className="notes-empty-state notes-empty-state--minimal">
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={deferredSearchQuery ? '没有找到匹配内容。' : '还没有笔记。'}
+            />
           </div>
         ) : (
-          notes.map((note, index) => (
-            <div
+          visibleNotes.map((note) => (
+            <button
               key={note.id}
-              className={`p-md px-lg my-0.5 rounded-md cursor-pointer border transition-all duration-fast animate-[slideIn_350ms_ease_forwards] ${
-                selectedNoteId === note.id
-                  ? 'bg-bg-active border-primary shadow-[inset_3px_0_0_#6366f1]'
-                  : 'border-transparent hover:bg-bg-hover'
-              }`}
-              style={{ animationDelay: `${index * 30}ms` }}
+              type="button"
+              className={`note-list-item ${selectedNoteId === note.id ? 'is-active' : ''}`}
               onClick={() => selectNote(note.id)}
             >
-              <div className="font-medium text-base text-text-primary mb-xs overflow-hidden text-ellipsis whitespace-nowrap">
-                {note.title || '无标题'}
+              <div className="note-list-item__head">
+                <Typography.Text className="note-title" strong ellipsis>
+                  {note.title || '无标题'}
+                </Typography.Text>
+                <span className={`note-status ${note.is_dirty ? 'note-status--dirty' : ''}`}>
+                  {note.is_dirty ? '未同步' : '已同步'}
+                </span>
               </div>
-              <div className="text-xs text-text-secondary overflow-hidden text-ellipsis whitespace-nowrap leading-normal">
+
+              <Typography.Paragraph className="note-preview" ellipsis={{ rows: 2 }}>
                 {getPreview(note.content)}
+              </Typography.Paragraph>
+
+              <div className="note-list-item__foot">
+                <span>{formatRelativeTime(note.updated_at)}</span>
+                {note.deleted_at ? <span>已删除</span> : null}
               </div>
-              <div className="text-xs text-text-muted mt-xs">
-                {formatTime(note.updated_at)}
-              </div>
-            </div>
+            </button>
           ))
         )}
       </div>
 
-      <div className="flex items-center gap-xs text-xs text-text-muted px-sm py-sm">
-        {isAuthenticated ? (
-          <>
-            <button
-              onClick={syncToCloud}
-              disabled={syncStatus === 'syncing'}
-              className="border-none bg-transparent text-primary flex items-center gap-2 text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:text-primary-hover transition-colors"
-              title="同步到云端"
-            >
-              <RefreshCw size={14} className={syncStatus === 'syncing' ? 'animate-spin' : ''} />
-              {syncStatus === 'syncing' ? '同步中...' : '云同步'}
-            </button>
-            <button
-              onClick={logout}
-              className="border-none bg-transparent text-text-secondary p-1 cursor-pointer hover:text-text-primary transition-colors"
-              title="登出"
-            >
-              <LogOut size={14} />
-            </button>
-          </>
-        ) : (
-          <>
-            <span className="w-1.5 h-1.5 rounded-full bg-success" />
-            <span>本地模式</span>
-            <button
-              onClick={onShowAuth}
-              className="ml-auto border-none bg-transparent text-text-secondary cursor-pointer p-2 hover:text-text-primary transition-colors"
-              title="登录以启用云同步"
-            >
-              <LogIn size={16} />
-            </button>
-          </>
-        )}
+      <div className="sidebar-footer sidebar-footer--simple">
+        <div className="sidebar-footer__meta">
+          <Typography.Text className="sidebar-footer__status">{footerText}</Typography.Text>
+          <Typography.Text className="sidebar-footer__hint">{footerHint}</Typography.Text>
+        </div>
       </div>
+
+      {isLoading ? <div className="sidebar-loading-indicator">正在读取本地笔记…</div> : null}
     </aside>
   )
 }

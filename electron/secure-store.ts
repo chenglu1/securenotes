@@ -5,6 +5,7 @@ import { join } from 'path';
 interface AuthSession {
   token: string;
   userId: string;
+  email?: string;
 }
 
 interface SecureStorePayload {

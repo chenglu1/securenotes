@@ -14,26 +14,34 @@ interface Note {
   is_dirty: number
 }
 
+type StoredNote = Note & { owner_user_id: string }
+
 interface Tag {
   id: string
   name: string
   color: string
 }
 
-let notes: Note[] = []
+let notes: StoredNote[] = []
 let tags: Tag[] = []
 const noteTags: Map<string, string[]> = new Map()
 const noop = () => {}
-let authSession: { token: string; userId: string } | null = null
+let authSession: { token: string; userId: string; email?: string } | null = null
 const encryptionKeys = new Map<string, string>()
+const LOCAL_NOTE_SCOPE = '__local__'
+
+function getCurrentScope() {
+  return authSession?.userId ?? LOCAL_NOTE_SCOPE
+}
 
 export const mockApi = {
-  getNotes: async () => notes.filter((n) => !n.deleted_at),
-  getNote: async (id: string) => notes.find((n) => n.id === id && !n.deleted_at),
+  getNotes: async () => notes.filter((n) => n.owner_user_id === getCurrentScope() && !n.deleted_at),
+  getNote: async (id: string) => notes.find((n) => n.id === id && n.owner_user_id === getCurrentScope() && !n.deleted_at),
   createNote: async (data: { title?: string; content?: string }) => {
     const now = new Date().toISOString()
-    const note: Note = {
+    const note: StoredNote = {
       id: uuid(),
+      owner_user_id: getCurrentScope(),
       title: data.title ?? '',
       content: data.content ?? '',
       created_at: now,
@@ -46,7 +54,7 @@ export const mockApi = {
     return note
   },
   updateNote: async (id: string, data: { title?: string; content?: string }) => {
-    const note = notes.find((n) => n.id === id)
+    const note = notes.find((n) => n.id === id && n.owner_user_id === getCurrentScope())
     if (!note) return undefined
     if (data.title !== undefined) note.title = data.title
     if (data.content !== undefined) note.content = data.content
@@ -55,7 +63,7 @@ export const mockApi = {
     return note
   },
   deleteNote: async (id: string) => {
-    const note = notes.find((n) => n.id === id)
+    const note = notes.find((n) => n.id === id && n.owner_user_id === getCurrentScope())
     if (note) {
       note.deleted_at = new Date().toISOString()
       note.is_dirty = 1
@@ -66,16 +74,27 @@ export const mockApi = {
     const q = query.toLowerCase()
     return notes.filter(
       (n) =>
+        n.owner_user_id === getCurrentScope() &&
         !n.deleted_at &&
         (n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q))
     )
   },
-  getDirtyNotes: async () => notes.filter((n) => n.is_dirty === 1),
+  getDirtyNotes: async () => notes.filter((n) => n.owner_user_id === getCurrentScope() && n.is_dirty === 1),
   markNoteSynced: async (id: string, syncVersion: number) => {
-    const note = notes.find((n) => n.id === id)
+    const note = notes.find((n) => n.id === id && n.owner_user_id === getCurrentScope())
     if (!note) return
     note.is_dirty = 0
     note.sync_version = syncVersion
+  },
+  claimLocalNotes: async (userId: string) => {
+    let count = 0
+    for (const note of notes) {
+      if (note.owner_user_id === LOCAL_NOTE_SCOPE) {
+        note.owner_user_id = userId
+        count++
+      }
+    }
+    return count
   },
   upsertNoteFromCloud: async (cloudNote: {
     id: string
@@ -85,11 +104,15 @@ export const mockApi = {
     createdAt: string
     updatedAt: string
     deletedAt?: string | null
-  }) => {
-    const existing = notes.find((note) => note.id === cloudNote.id)
+  }, options?: { force?: boolean }) => {
+    const force = options?.force === true
+    const existing = notes.find(
+      (note) => note.id === cloudNote.id && note.owner_user_id === getCurrentScope()
+    )
     if (!existing) {
-      const insertedNote: Note = {
+      const insertedNote: StoredNote = {
         id: cloudNote.id,
+        owner_user_id: getCurrentScope(),
         title: cloudNote.title,
         content: cloudNote.content,
         created_at: cloudNote.createdAt,
@@ -102,7 +125,7 @@ export const mockApi = {
       return insertedNote
     }
 
-    if (existing.is_dirty === 1 || existing.sync_version >= cloudNote.syncVersion) {
+    if (!force && (existing.is_dirty === 1 || existing.sync_version >= cloudNote.syncVersion)) {
       return existing
     }
 
@@ -148,7 +171,7 @@ export const mockApi = {
   showWindow: async () => undefined,
   quitApp: async () => undefined,
   getAuthSession: async () => authSession,
-  saveAuthSession: async (session: { token: string; userId: string }) => {
+  saveAuthSession: async (session: { token: string; userId: string; email?: string }) => {
     authSession = session
   },
   clearAuthSession: async () => {

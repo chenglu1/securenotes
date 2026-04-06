@@ -1,13 +1,22 @@
 import { v4 as uuid } from 'uuid'
 import { getDatabase, saveDatabase } from '../connection'
 import type { Note } from '../../types'
+import { getAuthSession } from '../../secure-store'
+
+const LOCAL_NOTE_SCOPE = '__local__'
 
 export class NotesRepository {
+  private getCurrentScope(): string {
+    return getAuthSession()?.userId ?? LOCAL_NOTE_SCOPE
+  }
+
   getAll(): Note[] {
+    const scope = this.getCurrentScope()
     const db = getDatabase()
     const stmt = db.prepare(
-      `SELECT * FROM notes WHERE deleted_at IS NULL ORDER BY updated_at DESC`
+      `SELECT * FROM notes WHERE deleted_at IS NULL AND owner_user_id = ? ORDER BY updated_at DESC`
     )
+    stmt.bind([scope])
     const results: Note[] = []
     while (stmt.step()) {
       results.push(stmt.getAsObject() as unknown as Note)
@@ -17,11 +26,12 @@ export class NotesRepository {
   }
 
   getById(id: string): Note | undefined {
+    const scope = this.getCurrentScope()
     const db = getDatabase()
     const stmt = db.prepare(
-      `SELECT * FROM notes WHERE id = ? AND deleted_at IS NULL`
+      `SELECT * FROM notes WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL`
     )
-    stmt.bind([id])
+    stmt.bind([id, scope])
     let result: Note | undefined
     if (stmt.step()) {
       result = stmt.getAsObject() as unknown as Note
@@ -31,6 +41,7 @@ export class NotesRepository {
   }
 
   create(data: { title?: string; content?: string }): Note {
+    const scope = this.getCurrentScope()
     const db = getDatabase()
     const id = uuid()
     const now = new Date().toISOString()
@@ -38,8 +49,8 @@ export class NotesRepository {
     const content = data.content ?? ''
 
     db.run(
-      `INSERT INTO notes (id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-      [id, title, content, now, now]
+      `INSERT INTO notes (id, owner_user_id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, scope, title, content, now, now]
     )
     saveDatabase()
 
@@ -56,8 +67,8 @@ export class NotesRepository {
     const content = data.content ?? note.content
 
     db.run(
-      `UPDATE notes SET title = ?, content = ?, updated_at = ?, is_dirty = 1 WHERE id = ?`,
-      [title, content, now, id]
+      `UPDATE notes SET title = ?, content = ?, updated_at = ?, is_dirty = 1 WHERE id = ? AND owner_user_id = ?`,
+      [title, content, now, id, this.getCurrentScope()]
     )
     saveDatabase()
 
@@ -68,8 +79,8 @@ export class NotesRepository {
     const db = getDatabase()
     const now = new Date().toISOString()
     db.run(
-      `UPDATE notes SET deleted_at = ?, is_dirty = 1 WHERE id = ?`,
-      [now, id]
+      `UPDATE notes SET deleted_at = ?, is_dirty = 1 WHERE id = ? AND owner_user_id = ?`,
+      [now, id, this.getCurrentScope()]
     )
     saveDatabase()
     return db.getRowsModified() > 0
@@ -78,16 +89,18 @@ export class NotesRepository {
   search(query: string): Note[] {
     if (!query.trim()) return this.getAll()
 
+    const scope = this.getCurrentScope()
     const db = getDatabase()
     const pattern = `%${query}%`
     const stmt = db.prepare(
       `SELECT * FROM notes
        WHERE deleted_at IS NULL
+         AND owner_user_id = ?
          AND (title LIKE ? OR content LIKE ?)
        ORDER BY updated_at DESC
        LIMIT 50`
     )
-    stmt.bind([pattern, pattern])
+    stmt.bind([scope, pattern, pattern])
     const results: Note[] = []
     while (stmt.step()) {
       results.push(stmt.getAsObject() as unknown as Note)
@@ -97,8 +110,10 @@ export class NotesRepository {
   }
 
   getDirty(): Note[] {
+    const scope = this.getCurrentScope()
     const db = getDatabase()
-    const stmt = db.prepare(`SELECT * FROM notes WHERE is_dirty = 1`)
+    const stmt = db.prepare(`SELECT * FROM notes WHERE is_dirty = 1 AND owner_user_id = ?`)
+    stmt.bind([scope])
     const results: Note[] = []
     while (stmt.step()) {
       results.push(stmt.getAsObject() as unknown as Note)
@@ -110,10 +125,20 @@ export class NotesRepository {
   markSynced(id: string, syncVersion: number): void {
     const db = getDatabase()
     db.run(
-      `UPDATE notes SET is_dirty = 0, sync_version = ? WHERE id = ?`,
-      [syncVersion, id]
+      `UPDATE notes SET is_dirty = 0, sync_version = ? WHERE id = ? AND owner_user_id = ?`,
+      [syncVersion, id, this.getCurrentScope()]
     )
     saveDatabase()
+  }
+
+  claimLocalNotes(userId: string): number {
+    const db = getDatabase()
+    db.run(
+      `UPDATE notes SET owner_user_id = ? WHERE owner_user_id = ?`,
+      [userId, LOCAL_NOTE_SCOPE]
+    )
+    saveDatabase()
+    return db.getRowsModified()
   }
 
   /**
@@ -127,12 +152,14 @@ export class NotesRepository {
     createdAt: string
     updatedAt: string
     deletedAt?: string | null
-  }): Note | undefined {
+  }, options?: { force?: boolean }): Note | undefined {
+    const scope = this.getCurrentScope()
     const db = getDatabase()
+    const force = options?.force === true
     
     // 查询笔记（包括已删除的）
-    const stmt = db.prepare(`SELECT * FROM notes WHERE id = ?`)
-    stmt.bind([cloudNote.id])
+    const stmt = db.prepare(`SELECT * FROM notes WHERE id = ? AND owner_user_id = ?`)
+    stmt.bind([cloudNote.id, scope])
     let localNote: Note | undefined
     if (stmt.step()) {
       localNote = stmt.getAsObject() as unknown as Note
@@ -140,7 +167,7 @@ export class NotesRepository {
     stmt.free()
 
     // 如果本地笔记是脏数据（有未同步的修改），不要覆盖
-    if (localNote && localNote.is_dirty === 1) {
+    if (localNote && localNote.is_dirty === 1 && !force) {
       console.log(`⏭️ Skipping note ${cloudNote.id} - local changes not synced yet`)
       return localNote
     }
@@ -148,10 +175,11 @@ export class NotesRepository {
     if (!localNote) {
       // Insert new note from cloud
       db.run(
-        `INSERT INTO notes (id, title, content, sync_version, is_dirty, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+        `INSERT INTO notes (id, owner_user_id, title, content, sync_version, is_dirty, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`,
         [
           cloudNote.id,
+          scope,
           cloudNote.title,
           cloudNote.content,
           cloudNote.syncVersion,
@@ -162,7 +190,7 @@ export class NotesRepository {
       )
     } else {
       // Update only if cloud version is strictly newer
-      if (cloudNote.syncVersion > (localNote.sync_version || 0)) {
+      if (force || cloudNote.syncVersion > (localNote.sync_version || 0)) {
         db.run(
           `UPDATE notes SET 
             title = ?,
@@ -171,7 +199,7 @@ export class NotesRepository {
             is_dirty = 0,
             updated_at = ?,
             deleted_at = ?
-           WHERE id = ?`,
+           WHERE id = ? AND owner_user_id = ?`,
           [
             cloudNote.title,
             cloudNote.content,
@@ -179,6 +207,7 @@ export class NotesRepository {
             cloudNote.updatedAt,
             cloudNote.deletedAt || null,
             cloudNote.id,
+            scope,
           ]
         )
       }

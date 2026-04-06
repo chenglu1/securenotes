@@ -52,7 +52,7 @@ export async function registerIpcHandlers(win: BrowserWindow | null) {
 
   // ── Secure Auth Storage ───────────────────────────────
   ipcMain.handle('auth:getSession', () => getAuthSession())
-  ipcMain.handle('auth:saveSession', (_e, session: { token: string; userId: string }) => {
+  ipcMain.handle('auth:saveSession', (_e, session: { token: string; userId: string; email?: string }) => {
     saveAuthSession(session)
   })
   ipcMain.handle('auth:clearSession', () => {
@@ -75,7 +75,8 @@ export async function registerIpcHandlers(win: BrowserWindow | null) {
   ipcMain.handle('notes:search', (_e, query: string) => notes.search(query))
   ipcMain.handle('notes:getDirty', () => notes.getDirty())
   ipcMain.handle('notes:markSynced', (_e, id: string, syncVersion: number) => notes.markSynced(id, syncVersion))
-  ipcMain.handle('notes:upsertFromCloud', (_e, cloudNote: any) => notes.upsertFromCloud(cloudNote))
+  ipcMain.handle('notes:upsertFromCloud', (_e, cloudNote: any, options?: { force?: boolean }) => notes.upsertFromCloud(cloudNote, options))
+  ipcMain.handle('notes:claimLocalNotes', (_e, userId: string) => notes.claimLocalNotes(userId))
 
   // ── Tags ───────────────────────────────────────────────
   ipcMain.handle('tags:getAll', () => tags.getAll())

@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  CloudSyncOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+  SyncOutlined,
+} from '@ant-design/icons'
+import { Alert, Button, Input, Tag, Tooltip, Typography } from 'antd'
 import { ConfigurableTiptapEditor } from '@chenglu1/xeditor-editor'
 import '@chenglu1/xeditor-editor/styles.css'
 import { useNoteStore } from '../../stores/noteStore'
-import { FileText, Trash2 } from 'lucide-react'
 import { apiUrl, getErrorMessage, readJson, resolveApiUrl } from '../../services/api'
 
 interface UploadResponse {
@@ -14,46 +20,97 @@ interface UploadResponse {
 export function EditorPane() {
   const selectedNoteId = useNoteStore((s) => s.selectedNoteId)
   const notes = useNoteStore((s) => s.notes)
+  const createNote = useNoteStore((s) => s.createNote)
+  const selectNote = useNoteStore((s) => s.selectNote)
   const updateNote = useNoteStore((s) => s.updateNote)
   const deleteNote = useNoteStore((s) => s.deleteNote)
+  const isAuthenticated = useNoteStore((s) => s.isAuthenticated)
+  const syncStatus = useNoteStore((s) => s.syncStatus)
+  const syncToCloud = useNoteStore((s) => s.syncToCloud)
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const contentDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const activeNoteIdRef = useRef<string | null>(null)
+  const latestTitleRef = useRef('')
+  const latestContentRef = useRef('')
 
-  // Load note content when selection changes
+  const flushPendingEdits = useCallback(
+    (noteId = activeNoteIdRef.current) => {
+      if (!noteId) {
+        return
+      }
+
+      const hasPendingChanges = Boolean(titleDebounceRef.current || contentDebounceRef.current)
+      if (!hasPendingChanges) {
+        return
+      }
+
+      if (titleDebounceRef.current) {
+        clearTimeout(titleDebounceRef.current)
+        titleDebounceRef.current = undefined
+      }
+
+      if (contentDebounceRef.current) {
+        clearTimeout(contentDebounceRef.current)
+        contentDebounceRef.current = undefined
+      }
+
+      void updateNote(noteId, {
+        title: latestTitleRef.current,
+        content: latestContentRef.current,
+      })
+    },
+    [updateNote]
+  )
+
+  const handleCreateFromEmpty = useCallback(async () => {
+    const note = await createNote()
+    if (note) {
+      selectNote(note.id)
+    }
+  }, [createNote, selectNote])
+
   useEffect(() => {
-    if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current)
-    if (contentDebounceRef.current) clearTimeout(contentDebounceRef.current)
+    const previousNoteId = activeNoteIdRef.current
+    if (previousNoteId && previousNoteId !== selectedNoteId) {
+      flushPendingEdits(previousNoteId)
+    }
 
     if (!selectedNote) {
+      activeNoteIdRef.current = null
+      latestTitleRef.current = ''
+      latestContentRef.current = ''
       setTitle('')
       setContent('')
       return
     }
 
+    activeNoteIdRef.current = selectedNote.id
+    latestTitleRef.current = selectedNote.title
+    latestContentRef.current = selectedNote.content || ''
     setTitle(selectedNote.title)
     setContent(selectedNote.content || '')
-  }, [selectedNoteId, selectedNote])
+  }, [selectedNoteId, selectedNote, flushPendingEdits])
 
   useEffect(() => {
     return () => {
-      if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current)
-      if (contentDebounceRef.current) clearTimeout(contentDebounceRef.current)
+      flushPendingEdits()
     }
-  }, [])
+  }, [flushPendingEdits])
 
   const handleContentChange = useCallback(
     (newContent: string) => {
       setContent(newContent)
+      latestContentRef.current = newContent
       if (!selectedNoteId) return
 
-      // Debounced auto-save
       if (contentDebounceRef.current) clearTimeout(contentDebounceRef.current)
       contentDebounceRef.current = setTimeout(() => {
         void updateNote(selectedNoteId, { content: newContent })
+        contentDebounceRef.current = undefined
       }, 500)
     },
     [selectedNoteId, updateNote]
@@ -63,11 +120,13 @@ export function EditorPane() {
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const newTitle = e.target.value
       setTitle(newTitle)
+      latestTitleRef.current = newTitle
       if (!selectedNoteId) return
 
       if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current)
       titleDebounceRef.current = setTimeout(() => {
         void updateNote(selectedNoteId, { title: newTitle })
+        titleDebounceRef.current = undefined
       }, 500)
     },
     [selectedNoteId, updateNote]
@@ -89,8 +148,6 @@ export function EditorPane() {
     []
   )
 
-  // 图片上传处理（TODO: 接入真实上传服务）
-  // 使用 as any 兼容 xeditor-editor 不同版本的类型签名
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleImageUpload = useCallback(async (_file: File, ..._args: any[]): Promise<string> => {
     const formData = new FormData()
@@ -109,58 +166,135 @@ export function EditorPane() {
     return resolveApiUrl(payload.url)
   }, []) as any
 
-  // No note selected
+  const syncTagColor = selectedNote?.is_dirty ? 'warning' : isAuthenticated ? 'success' : 'default'
+  const syncTagLabel = selectedNote?.is_dirty ? '未同步' : isAuthenticated ? '已同步' : '本地草稿'
+  const syncStateLabel =
+    syncStatus === 'syncing'
+      ? '同步中'
+      : syncStatus === 'error'
+        ? '同步失败'
+        : syncStatus === 'success' && isAuthenticated
+          ? '已同步到云端'
+          : null
+  const updatedAtLabel = selectedNote
+    ? new Intl.DateTimeFormat('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(selectedNote.updated_at))
+    : ''
+  const metaLine = updatedAtLabel ? `最近编辑 ${updatedAtLabel}` : '新建文档'
+
   if (!selectedNote) {
     return (
-      <div className="flex-1 flex flex-col h-screen overflow-hidden bg-bg-primary">
-        <div className="flex flex-col items-center justify-center h-full text-text-muted gap-lg p-3xl text-center animate-[fadeIn_350ms_ease_forwards]">
-          <FileText className="w-16 h-16 opacity-30" size={64} />
-          <h2 className="text-lg font-medium text-text-secondary">选择或创建一篇笔记</h2>
-          <p className="text-sm max-w-[300px] leading-relaxed">
-            从左侧选择一篇笔记开始编辑，或点击 + 按钮创建新笔记
-          </p>
+      <section className="editor-panel">
+        <div className="editor-topbar editor-topbar--minimal editor-topbar--ghost app-region-drag">
+          <div className="editor-topbar__left">
+            <span className="editor-topbar__eyebrow">文档编辑页</span>
+          </div>
         </div>
-      </div>
+
+        <div className="editor-body editor-body--empty editor-body--notion-empty">
+          <div className="empty-stage empty-stage--minimal">
+            <Typography.Title level={2} className="empty-stage__title">
+              开始记录
+            </Typography.Title>
+            <Typography.Paragraph className="empty-stage__description">
+              新建一篇笔记，像使用文档工具一样开始写作。
+            </Typography.Paragraph>
+
+            <Button
+              type="primary"
+              size="large"
+              icon={<PlusOutlined />}
+              onClick={() => void handleCreateFromEmpty()}
+            >
+              新建笔记
+            </Button>
+          </div>
+        </div>
+      </section>
     )
   }
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-bg-primary animate-[fadeIn_350ms_ease_forwards]">
-      <div className="flex items-center justify-between pt-[46px] px-xl pb-sm border-b border-border [-webkit-app-region:drag]">
-        <input
-          type="text"
-          className="text-2xl font-bold text-text-primary bg-transparent border-none outline-none w-full font-sans placeholder:text-text-muted [-webkit-app-region:no-drag]"
-          placeholder="无标题"
-          value={title}
-          onChange={handleTitleChange}
-          onKeyDown={handleTitleKeyDown}
-        />
-        <button
-          className="w-9 h-9 p-0 border-none bg-transparent text-danger rounded-md cursor-pointer flex items-center justify-center hover:bg-bg-hover transition-all duration-fast [-webkit-app-region:no-drag]"
-          onClick={handleDelete}
-          title="删除笔记"
-        >
-          <Trash2 size={18} />
-        </button>
+    <section className="editor-panel">
+      <div className="editor-topbar editor-topbar--minimal editor-topbar--ghost app-region-drag">
+        <div className="editor-topbar__left">
+          <span className="editor-topbar__eyebrow">文档编辑页</span>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-xl">
-        <ConfigurableTiptapEditor
-          value={content}
-          valueType="markdown"
-          placeholder="开始写点什么..."
-          onUpdate={(event) => {
-            if (event.valueType === 'markdown') {
-              handleContentChange(event.value as string)
-            }
-          }}
-          showToolbar={true}
-          uploadHandler={handleImageUpload}
-          maxFileSize={5 * 1024 * 1024}
-          minHeight="400px"
-          compact={true}
-        />
+      <div className="editor-body">
+        <div className="editor-content-wrap">
+          <div className="editor-header editor-header--simple">
+            <div className="editor-header-main app-region-drag">
+              <Input
+                bordered={false}
+                className="editor-title-input app-region-no-drag"
+                placeholder="无标题"
+                value={title}
+                onChange={handleTitleChange}
+                onKeyDown={handleTitleKeyDown}
+              />
+
+              <div className="editor-meta-line app-region-no-drag">
+                <Tag color={syncTagColor} className="editor-sync-tag">{syncTagLabel}</Tag>
+                <Typography.Text className="editor-meta-text">{metaLine}</Typography.Text>
+                {syncStateLabel ? (
+                  <Typography.Text className="editor-meta-text">{syncStateLabel}</Typography.Text>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="editor-actions editor-actions--simple app-region-no-drag">
+              {isAuthenticated ? (
+                <Tooltip title="把本地改动同步到云端">
+                  <Button
+                    icon={syncStatus === 'syncing' ? <SyncOutlined spin /> : <CloudSyncOutlined />}
+                    loading={syncStatus === 'syncing'}
+                    onClick={() => void syncToCloud()}
+                  >
+                    同步
+                  </Button>
+                </Tooltip>
+              ) : null}
+
+              <Button danger type="text" icon={<DeleteOutlined />} onClick={() => void handleDelete()}>
+                删除
+              </Button>
+            </div>
+          </div>
+
+          {syncStatus === 'reauth-required' ? (
+            <Alert
+              showIcon
+              type="warning"
+              className="editor-alert"
+              message="当前登录态缺少加密密钥，请重新登录后再继续云同步。"
+            />
+          ) : null}
+
+          <div className="editor-surface editor-surface--simple">
+            <ConfigurableTiptapEditor
+              value={content}
+              valueType="markdown"
+              placeholder="开始写点什么..."
+              onUpdate={(event) => {
+                if (event.valueType === 'markdown') {
+                  handleContentChange(event.value as string)
+                }
+              }}
+              showToolbar={true}
+              uploadHandler={handleImageUpload}
+              maxFileSize={5 * 1024 * 1024}
+              minHeight="560px"
+              compact={true}
+            />
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
   )
 }

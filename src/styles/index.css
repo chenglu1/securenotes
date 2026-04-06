@@ -2,45 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── SecureNotes Design System ─────────────────────────── */
-
 :root {
-  /* ── Colors ── */
-  --bg-primary: #0f0f13;
-  --bg-secondary: #16161d;
-  --bg-tertiary: #1c1c27;
-  --bg-elevated: #22222f;
-  --bg-hover: #2a2a3a;
-  --bg-active: #32324a;
+  --app-bg: #f3ebde;
+  --app-bg-deep: #e7dcc9;
+  --panel-bg: rgba(255, 250, 242, 0.84);
+  --panel-bg-strong: rgba(255, 251, 245, 0.96);
+  --panel-muted: rgba(244, 235, 223, 0.88);
+  --panel-line: rgba(23, 33, 43, 0.1);
+  --panel-shadow: 0 28px 60px rgba(36, 42, 52, 0.12);
 
-  --text-primary: #e8e8ed;
-  --text-secondary: #9a9ab0;
-  --text-muted: #5e5e7a;
+  --ink-strong: #17212b;
+  --ink-base: #324152;
+  --ink-soft: #6f7c88;
+  --ink-faint: #97a0a8;
 
-  --accent-primary: #6366f1;
-  --accent-hover: #818cf8;
-  --accent-glow: rgba(99, 102, 241, 0.25);
-  --accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --accent: #0f766e;
+  --accent-strong: #115e59;
+  --accent-soft: rgba(15, 118, 110, 0.14);
+  --amber: #c87b2a;
 
-  --border-color: rgba(255, 255, 255, 0.06);
-
-  --success: #34d399;
-  --warning: #fbbf24;
-
-  /* ── Typography ── */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-
-  /* ── Transitions ── */
-  --transition-fast: 120ms ease;
-  --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
-
-  /* ── Layout ── */
-  --sidebar-width: 280px;
-  --titlebar-height: 38px;
+  --font-display: 'Aptos Display', 'Segoe UI Variable Display', 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
+  --font-sans: 'Aptos', 'Segoe UI Variable Text', 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', 'Consolas', monospace;
+  --titlebar-height: 32px;
 }
 
-/* ── Reset ── */
 *,
 *::before,
 *::after {
@@ -58,82 +44,191 @@ body,
 
 body {
   font-family: var(--font-sans);
-  font-size: 14px;
-  color: var(--text-primary);
-  background-color: var(--bg-primary);
+  color: var(--ink-strong);
+  background: #f7f6f3;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  user-select: none;
+  user-select: auto;
+  position: relative;
 }
 
-/* ── Scrollbar ── */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+body::before {
+  display: none;
 }
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
+  background: rgba(23, 33, 43, 0.16);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(23, 33, 43, 0.26);
+  background-clip: padding-box;
 }
 
-/* ── Focus ── */
 :focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
+  outline: 2px solid rgba(15, 118, 110, 0.35);
+  outline-offset: 3px;
 }
 
-/* ── Animations ── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-@keyframes slideIn {
-  from { opacity: 0; transform: translateX(-8px); }
-  to { opacity: 1; transform: translateX(0); }
+@keyframes floatIn {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
-  50% { box-shadow: 0 0 16px 2px var(--accent-glow); }
+.app-frame {
+  position: relative;
+  height: 100%;
+  padding: 12px;
 }
 
-/* ── Editor overrides (xeditor-editor integration) ── */
-
-/* 工具栏固定定位 */
-.tiptap-toolbar[data-variant=fixed] {
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 10 !important;
+.titlebar-drag {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--titlebar-height);
+  -webkit-app-region: drag;
+  z-index: 5;
 }
 
-/* 编辑器内容区透明背景 */
-.ProseMirror,
-.tiptap {
+.app-region-drag {
+  -webkit-app-region: drag;
+}
+
+.app-region-no-drag,
+.app-region-no-drag * {
+  -webkit-app-region: no-drag;
+}
+
+.workspace-shell {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid #ece9e4;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.035);
+}
+
+.shell-layout {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  gap: 0;
   background: transparent !important;
-  color: var(--text-primary) !important;
-  min-height: 400px;
-  border: none !important;
-  box-shadow: none !important;
-  outline: none !important;
 }
 
-.ProseMirror:focus,
-.tiptap:focus {
-  outline: none !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
-.ProseMirror-promotedUI {
+.shell-sider.ant-layout-sider,
+.shell-content.ant-layout-content {
   background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  outline: none !important;
+  min-height: 0;
+}
+
+.shell-sider.ant-layout-sider {
+  border-right: 1px solid #f1efeb;
+  background: #fbfbfa !important;
+}
+
+.shell-content.ant-layout-content {
+  background: #ffffff !important;
+}
+
+.sidebar-panel,
+.editor-panel {
+  height: 100%;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ant-btn-primary {
+  background: #2f3437 !important;
+}
+
+.ant-btn-primary:hover,
+.ant-btn-primary:focus {
+  background: #42464a !important;
+}
+
+.ant-typography,
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-btn,
+.ant-tag,
+.ant-modal,
+.ant-card {
+  font-family: var(--font-sans);
+}
+
+@media (max-width: 1100px) {
+  .app-frame {
+    padding: 10px;
+  }
+
+  .workspace-shell {
+    border-radius: 12px;
+  }
+
+  .shell-layout {
+    flex-direction: column !important;
+  }
+
+  .shell-sider.ant-layout-sider {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+    border-right: none;
+    border-bottom: 1px solid #f1efeb;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-frame {
+    padding: 8px;
+  }
 }

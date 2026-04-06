@@ -14,8 +14,10 @@ const api = {
   getDirtyNotes: () => ipcRenderer.invoke('notes:getDirty'),
   markNoteSynced: (id: string, syncVersion: number) =>
     ipcRenderer.invoke('notes:markSynced', id, syncVersion),
-  upsertNoteFromCloud: (cloudNote: any) =>
-    ipcRenderer.invoke('notes:upsertFromCloud', cloudNote),
+  upsertNoteFromCloud: (cloudNote: any, options?: { force?: boolean }) =>
+    ipcRenderer.invoke('notes:upsertFromCloud', cloudNote, options),
+  claimLocalNotes: (userId: string) =>
+    ipcRenderer.invoke('notes:claimLocalNotes', userId),
 
   // ── Tags ───────────────────────────────────────────────
   getTags: () => ipcRenderer.invoke('tags:getAll'),
@@ -48,7 +50,7 @@ const api = {
 
   // ── Secure Auth Storage ───────────────────────────────
   getAuthSession: () => ipcRenderer.invoke('auth:getSession'),
-  saveAuthSession: (session: { token: string; userId: string }) =>
+  saveAuthSession: (session: { token: string; userId: string; email?: string }) =>
     ipcRenderer.invoke('auth:saveSession', session),
   clearAuthSession: () => ipcRenderer.invoke('auth:clearSession'),
   getEncryptionKey: (userId: string) => ipcRenderer.invoke('auth:getEncryptionKey', userId),

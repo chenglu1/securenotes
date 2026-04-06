@@ -2,6 +2,9 @@ import initSqlJs, { Database } from 'sql.js'
 import { join } from 'path'
 import { app } from 'electron'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { getAuthSession } from '../secure-store'
+
+const LOCAL_NOTE_SCOPE = '__local__'
 
 let db: Database | null = null
 let dbPath: string | null = null
@@ -54,6 +57,7 @@ function runMigrations(db: Database) {
   db.run(`
     CREATE TABLE IF NOT EXISTS notes (
       id            TEXT PRIMARY KEY,
+      owner_user_id TEXT NOT NULL DEFAULT '${LOCAL_NOTE_SCOPE}',
       title         TEXT NOT NULL DEFAULT '',
       content       TEXT NOT NULL DEFAULT '',
       created_at    TEXT NOT NULL DEFAULT (datetime('now')),
@@ -63,6 +67,27 @@ function runMigrations(db: Database) {
       is_dirty      INTEGER DEFAULT 1
     );
   `)
+
+  if (!hasColumn(db, 'notes', 'owner_user_id')) {
+    db.run(
+      `ALTER TABLE notes ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT '${LOCAL_NOTE_SCOPE}';`
+    )
+  }
+
+  db.run(`CREATE INDEX IF NOT EXISTS idx_notes_owner_user_id ON notes(owner_user_id);`)
+
+  const currentUserId = getAuthSession()?.userId
+  if (currentUserId) {
+    db.run(
+      `UPDATE notes SET owner_user_id = ? WHERE owner_user_id IS NULL OR owner_user_id = ?`,
+      [currentUserId, LOCAL_NOTE_SCOPE]
+    )
+  } else {
+    db.run(
+      `UPDATE notes SET owner_user_id = ? WHERE owner_user_id IS NULL`,
+      [LOCAL_NOTE_SCOPE]
+    )
+  }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS tags (
@@ -91,6 +116,20 @@ function runMigrations(db: Database) {
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `)
+}
+
+function hasColumn(db: Database, tableName: string, columnName: string): boolean {
+  const result = db.exec(`PRAGMA table_info(${tableName});`)
+  if (result.length === 0) {
+    return false
+  }
+
+  const nameIndex = result[0].columns.indexOf('name')
+  if (nameIndex === -1) {
+    return false
+  }
+
+  return result[0].values.some((row) => row[nameIndex] === columnName)
 }
 
 export function closeDatabase() {

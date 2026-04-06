@@ -1,5 +1,4 @@
 import { MigrationInterface, QueryRunner, Table, TableColumn } from 'typeorm';
-import { randomBytes } from 'node:crypto';
 
 export class InitSchema1712371200000 implements MigrationInterface {
   name = 'InitSchema1712371200000';
@@ -80,8 +79,7 @@ export class InitSchema1712371200000 implements MigrationInterface {
     );
 
     await queryRunner.query(
-      'UPDATE "users" SET "keySalt" = $1 WHERE "keySalt" IS NULL',
-      [randomBytes(16).toString('base64')],
+      "UPDATE \"users\" SET \"keySalt\" = encode(gen_random_bytes(16), 'base64') WHERE \"keySalt\" IS NULL",
     );
   }
 

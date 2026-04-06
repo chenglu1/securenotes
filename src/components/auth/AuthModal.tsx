@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { X } from 'lucide-react'
+import { LockOutlined, MailOutlined } from '@ant-design/icons'
+import { Alert, Button, Input, Modal, Segmented, Typography } from 'antd'
 import { useNoteStore } from '../../stores/noteStore'
 
 interface AuthModalProps {
@@ -15,6 +16,7 @@ export function AuthModal({ onClose }: AuthModalProps) {
 
   const login = useNoteStore((s) => s.login)
   const register = useNoteStore((s) => s.register)
+  const syncStatus = useNoteStore((s) => s.syncStatus)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,50 +39,76 @@ export function AuthModal({ onClose }: AuthModalProps) {
   }
 
   return (
-    <div 
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
+    <Modal
+      open
+      centered
+      footer={null}
+      width={420}
+      destroyOnClose
+      maskClosable={!loading}
+      onCancel={onClose}
+      className="auth-modal"
     >
-      <div 
-        className="w-full max-w-[420px] rounded-2xl bg-[#1a1a24] p-8 shadow-2xl border border-[#2a2a3a] relative"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-[#9a9ab0] hover:text-[#e8e8ed] transition-colors p-1 flex items-center"
-          title="关闭"
-        >
-          <X size={20} />
-        </button>
-        
-        <h2 className="mb-6 text-2xl font-bold text-[#e8e8ed]">
-          {isLogin ? '登录' : '注册'} SecureNotes
-        </h2>
+      <div className="auth-panel">
+        <div className="auth-hero auth-hero--simple">
+          <Typography.Text className="auth-kicker auth-kicker--notion">Secure Workspace</Typography.Text>
+          <Typography.Title level={3} className="auth-title auth-title--simple">
+            {isLogin ? '登录 SecureNotes' : '创建 SecureNotes 账户'}
+          </Typography.Title>
+          <Typography.Paragraph className="auth-subtitle">
+            像常见文档工具一样使用它。内容先保存在本地，登录后再同步到你的云端空间。
+          </Typography.Paragraph>
+        </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label className="block text-[13px] font-medium text-[#c7c7d3] mb-2">
+        {syncStatus === 'reauth-required' && (
+          <Alert
+            showIcon
+            type="warning"
+            message="检测到旧版登录态缺少加密密钥，请重新输入密码以恢复云同步。"
+          />
+        )}
+
+        <Segmented
+          block
+          size="large"
+          options={[
+            { label: '登录', value: 'login' },
+            { label: '注册', value: 'register' },
+          ]}
+          value={isLogin ? 'login' : 'register'}
+          onChange={(value) => {
+            setIsLogin(value === 'login')
+            setError('')
+          }}
+        />
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          <div className="auth-field">
+            <label className="auth-field__label">
               邮箱
             </label>
-            <input
+            <Input
               type="email"
+              size="large"
+              prefix={<MailOutlined />}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg bg-[#0f0f13] border border-[#2a2a3a] px-3.5 py-2.5 text-[#e8e8ed] text-sm outline-none focus:border-[#6366f1] transition-colors"
+              className="auth-input"
               placeholder="your@email.com"
               required
             />
           </div>
 
-          <div>
-            <label className="block text-[13px] font-medium text-[#c7c7d3] mb-2">
+          <div className="auth-field">
+            <label className="auth-field__label">
               密码
             </label>
-            <input
-              type="password"
+            <Input.Password
+              size="large"
+              prefix={<LockOutlined />}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg bg-[#0f0f13] border border-[#2a2a3a] px-3.5 py-2.5 text-[#e8e8ed] text-sm outline-none focus:border-[#6366f1] transition-colors"
+              className="auth-input"
               placeholder="••••••••"
               required
               minLength={6}
@@ -88,35 +116,35 @@ export function AuthModal({ onClose }: AuthModalProps) {
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-[13px] text-red-400">
-              {error}
-            </div>
+            <Alert showIcon type="error" message={error} />
           )}
 
-          <button
-            type="submit"
+          <Button
+            type="primary"
+            htmlType="submit"
+            size="large"
+            block
             disabled={loading}
-            className="w-full rounded-lg bg-[#6366f1] px-4 py-2.5 font-medium text-white text-sm mt-2 hover:bg-[#818cf8] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            loading={loading}
           >
-            {loading ? '处理中...' : isLogin ? '登录' : '注册'}
-          </button>
+            {loading ? '处理中...' : isLogin ? '登录并同步' : '注册并开始同步'}
+          </Button>
         </form>
 
-        <div className="mt-4 text-center">
-          <button
-            onClick={() => setIsLogin(!isLogin)}
-            className="text-[13px] text-[#818cf8] hover:text-[#a5b4fc] transition-colors"
+        <div className="auth-footer-copy">
+          <Button
+            type="link"
+            onClick={() => {
+              setIsLogin(!isLogin)
+              setError('')
+            }}
           >
             {isLogin ? '没有账号？注册' : '已有账号？登录'}
-          </button>
-        </div>
+          </Button>
 
-        <div className="mt-6 pt-6 border-t border-[#2a2a3a]">
-          <p className="text-xs text-[#6e6e8a] text-center">
-            💡 提示：注册后数据将同步到云端
-          </p>
+          <Typography.Text className="auth-helper-text">数据默认先保存在本地。</Typography.Text>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

@@ -8,6 +8,7 @@ export function App() {
   const loadTags = useNoteStore((s) => s.loadTags)
   const initAuth = useNoteStore((s) => s.initAuth)
   const isAuthenticated = useNoteStore((s) => s.isAuthenticated)
+  const syncStatus = useNoteStore((s) => s.syncStatus)
   const createNote = useNoteStore((s) => s.createNote)
   const selectNote = useNoteStore((s) => s.selectNote)
   const [showAuthModal, setShowAuthModal] = useState(false)
@@ -30,6 +31,12 @@ export function App() {
       }
     })
   }, [createNote, selectNote])
+
+  useEffect(() => {
+    if (syncStatus === 'reauth-required') {
+      setShowAuthModal(true)
+    }
+  }, [syncStatus])
 
   return (
     <>
