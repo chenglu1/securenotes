@@ -83,6 +83,7 @@ function parseBooleanEnv(rawValue: string | undefined): boolean | undefined {
 
     // JWT authentication
     JwtModule.registerAsync({
+      global: true,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const jwtSecret = configService.get<string>('JWT_SECRET')?.trim();
@@ -93,7 +94,6 @@ function parseBooleanEnv(rawValue: string | undefined): boolean | undefined {
         }
 
         return {
-          global: true,
           secret: jwtSecret || 'dev-secret-change-in-production',
           signOptions: { expiresIn: '7d' },
         };
