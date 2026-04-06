@@ -3,6 +3,13 @@ import { ConfigurableTiptapEditor } from '@chenglu1/xeditor-editor'
 import '@chenglu1/xeditor-editor/styles.css'
 import { useNoteStore } from '../../stores/noteStore'
 import { FileText, Trash2 } from 'lucide-react'
+import { apiUrl, getErrorMessage, readJson, resolveApiUrl } from '../../services/api'
+
+interface UploadResponse {
+  url: string
+  message?: string | string[]
+  error?: string
+}
 
 export function EditorPane() {
   const selectedNoteId = useNoteStore((s) => s.selectedNoteId)
@@ -13,10 +20,14 @@ export function EditorPane() {
   const selectedNote = notes.find((n) => n.id === selectedNoteId)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const contentDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   // Load note content when selection changes
   useEffect(() => {
+    if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current)
+    if (contentDebounceRef.current) clearTimeout(contentDebounceRef.current)
+
     if (!selectedNote) {
       setTitle('')
       setContent('')
@@ -27,15 +38,22 @@ export function EditorPane() {
     setContent(selectedNote.content || '')
   }, [selectedNoteId, selectedNote])
 
+  useEffect(() => {
+    return () => {
+      if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current)
+      if (contentDebounceRef.current) clearTimeout(contentDebounceRef.current)
+    }
+  }, [])
+
   const handleContentChange = useCallback(
     (newContent: string) => {
       setContent(newContent)
       if (!selectedNoteId) return
 
       // Debounced auto-save
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-      debounceRef.current = setTimeout(() => {
-        updateNote(selectedNoteId, { content: newContent })
+      if (contentDebounceRef.current) clearTimeout(contentDebounceRef.current)
+      contentDebounceRef.current = setTimeout(() => {
+        void updateNote(selectedNoteId, { content: newContent })
       }, 500)
     },
     [selectedNoteId, updateNote]
@@ -47,9 +65,9 @@ export function EditorPane() {
       setTitle(newTitle)
       if (!selectedNoteId) return
 
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-      debounceRef.current = setTimeout(() => {
-        updateNote(selectedNoteId, { title: newTitle })
+      if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current)
+      titleDebounceRef.current = setTimeout(() => {
+        void updateNote(selectedNoteId, { title: newTitle })
       }, 500)
     },
     [selectedNoteId, updateNote]
@@ -75,7 +93,20 @@ export function EditorPane() {
   // 使用 as any 兼容 xeditor-editor 不同版本的类型签名
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleImageUpload = useCallback(async (_file: File, ..._args: any[]): Promise<string> => {
-    throw new Error('图片上传服务未配置，请接入实际的上传接口')
+    const formData = new FormData()
+    formData.append('file', _file)
+
+    const response = await fetch(apiUrl('/upload/image'), {
+      method: 'POST',
+      body: formData,
+    })
+
+    const payload = await readJson<UploadResponse>(response)
+    if (!response.ok || !payload?.url) {
+      throw new Error(getErrorMessage(payload, '图片上传失败'))
+    }
+
+    return resolveApiUrl(payload.url)
   }, []) as any
 
   // No note selected

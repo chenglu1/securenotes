@@ -48,10 +48,18 @@ const api = {
 
   // ── App Events ─────────────────────────────────────────
   onMainProcessMessage: (callback: (message: string) => void) => {
-    ipcRenderer.on('main-process-message', (_event, message) => callback(message))
+    const listener = (_event: Electron.IpcRendererEvent, message: string) => callback(message)
+    ipcRenderer.on('main-process-message', listener)
+    return () => {
+      ipcRenderer.removeListener('main-process-message', listener)
+    }
   },
   onCreateNewNote: (callback: () => void) => {
-    ipcRenderer.on('create-new-note', () => callback())
+    const listener = () => callback()
+    ipcRenderer.on('create-new-note', listener)
+    return () => {
+      ipcRenderer.removeListener('create-new-note', listener)
+    }
   },
 }
 

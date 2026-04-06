@@ -23,6 +23,7 @@ interface Tag {
 let notes: Note[] = []
 let tags: Tag[] = []
 const noteTags: Map<string, string[]> = new Map()
+const noop = () => {}
 
 export const mockApi = {
   getNotes: async () => notes.filter((n) => !n.deleted_at),
@@ -48,11 +49,15 @@ export const mockApi = {
     if (data.title !== undefined) note.title = data.title
     if (data.content !== undefined) note.content = data.content
     note.updated_at = new Date().toISOString()
+    note.is_dirty = 1
     return note
   },
   deleteNote: async (id: string) => {
     const note = notes.find((n) => n.id === id)
-    if (note) note.deleted_at = new Date().toISOString()
+    if (note) {
+      note.deleted_at = new Date().toISOString()
+      note.is_dirty = 1
+    }
     return !!note
   },
   searchNotes: async (query: string) => {
@@ -62,6 +67,50 @@ export const mockApi = {
         !n.deleted_at &&
         (n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q))
     )
+  },
+  getDirtyNotes: async () => notes.filter((n) => n.is_dirty === 1),
+  markNoteSynced: async (id: string, syncVersion: number) => {
+    const note = notes.find((n) => n.id === id)
+    if (!note) return
+    note.is_dirty = 0
+    note.sync_version = syncVersion
+  },
+  upsertNoteFromCloud: async (cloudNote: {
+    id: string
+    title: string
+    content: string
+    syncVersion: number
+    createdAt: string
+    updatedAt: string
+    deletedAt?: string | null
+  }) => {
+    const existing = notes.find((note) => note.id === cloudNote.id)
+    if (!existing) {
+      const insertedNote: Note = {
+        id: cloudNote.id,
+        title: cloudNote.title,
+        content: cloudNote.content,
+        created_at: cloudNote.createdAt,
+        updated_at: cloudNote.updatedAt,
+        deleted_at: cloudNote.deletedAt ?? null,
+        sync_version: cloudNote.syncVersion,
+        is_dirty: 0,
+      }
+      notes.unshift(insertedNote)
+      return insertedNote
+    }
+
+    if (existing.is_dirty === 1 || existing.sync_version >= cloudNote.syncVersion) {
+      return existing
+    }
+
+    existing.title = cloudNote.title
+    existing.content = cloudNote.content
+    existing.updated_at = cloudNote.updatedAt
+    existing.deleted_at = cloudNote.deletedAt ?? null
+    existing.sync_version = cloudNote.syncVersion
+    existing.is_dirty = 0
+    return existing
   },
   getTags: async () => tags,
   createTag: async (data: { name: string; color?: string }) => {
@@ -90,7 +139,14 @@ export const mockApi = {
   getAttachments: async () => [],
   deleteAttachment: async () => false,
   openAttachment: async () => false,
-  onMainProcessMessage: () => {},
+  minimizeWindow: async () => undefined,
+  maximizeWindow: async () => undefined,
+  closeWindow: async () => undefined,
+  hideWindow: async () => undefined,
+  showWindow: async () => undefined,
+  quitApp: async () => undefined,
+  onMainProcessMessage: () => noop,
+  onCreateNewNote: () => noop,
 }
 
 // Install mock API if running in browser (not in Electron)

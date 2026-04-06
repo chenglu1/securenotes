@@ -4,24 +4,56 @@
  */
 import { config } from 'dotenv';
 import { Client } from 'pg';
+import { resolve } from 'node:path';
 
 // 加载环境变量
-config();
+config({ path: resolve(__dirname, '.env') });
+
+function buildConnectionString(): string | null {
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (databaseUrl) {
+    return databaseUrl;
+  }
+
+  const host = process.env.DB_HOST?.trim();
+  const user = process.env.DB_USER?.trim();
+  const password = process.env.DB_PASSWORD;
+  const database = process.env.DB_NAME?.trim();
+  const port = process.env.DB_PORT?.trim() || '5432';
+
+  if (!host || !user || !password || !database) {
+    return null;
+  }
+
+  return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}?sslmode=require`;
+}
+
+function maskConnectionString(connectionString: string): string {
+  try {
+    const parsedUrl = new URL(connectionString);
+    if (parsedUrl.password) {
+      parsedUrl.password = '****';
+    }
+    return parsedUrl.toString();
+  } catch {
+    return connectionString.replace(/:(.*?)@/, ':****@');
+  }
+}
 
 async function testConnection() {
   console.log('🔍 正在测试数据库连接...\n');
 
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = buildConnectionString();
   
   if (!connectionString) {
-    console.error('❌ 错误: 未找到 DATABASE_URL 环境变量');
-    console.log('请检查 server/.env 文件是否存在并包含 DATABASE_URL');
+    console.error('❌ 错误: 未找到数据库连接配置');
+    console.log('请检查 server/.env 文件，至少配置 DATABASE_URL 或 DB_HOST/DB_USER/DB_PASSWORD/DB_NAME');
     process.exit(1);
   }
 
   console.log('📋 连接信息:');
   // 隐藏密码显示
-  const safeUrl = connectionString.replace(/:(.*?)@/, ':****@');
+  const safeUrl = maskConnectionString(connectionString);
   console.log(`   URL: ${safeUrl}\n`);
 
   const client = new Client({

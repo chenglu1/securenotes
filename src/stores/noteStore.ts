@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { apiUrl, getErrorMessage, isFetchError, readJson } from '../services/api'
 
 export interface Note {
   id: string
@@ -15,6 +16,50 @@ export interface Tag {
   id: string
   name: string
   color: string
+}
+
+interface AuthResponse {
+  token: string
+  userId: string
+  message?: string | string[]
+  error?: string
+}
+
+interface CloudNote {
+  id: string
+  encryptedTitle: string
+  encryptedContent: string
+  syncVersion: number
+  createdAt: string
+  updatedAt: string
+  deletedAt?: string | null
+}
+
+interface SyncPushResponse {
+  success: true
+  status: 'created' | 'updated'
+  note: CloudNote
+  message?: string | string[]
+  error?: string
+}
+
+interface SyncConflictResponse {
+  status?: 'conflict'
+  note?: CloudNote
+  message?: string | string[]
+  error?: string
+}
+
+function toLocalCloudNote(cloudNote: CloudNote) {
+  return {
+    id: cloudNote.id,
+    title: cloudNote.encryptedTitle,
+    content: cloudNote.encryptedContent,
+    syncVersion: cloudNote.syncVersion,
+    createdAt: cloudNote.createdAt,
+    updatedAt: cloudNote.updatedAt,
+    deletedAt: cloudNote.deletedAt ?? null,
+  }
 }
 
 interface NoteStore {
@@ -194,18 +239,18 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   login: async (email, password) => {
     try {
-      const response = await fetch('http://localhost:3000/api/auth/login', {
+      const response = await fetch(apiUrl('/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
+      const payload = await readJson<AuthResponse>(response)
       
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || '登录失败')
+      if (!response.ok || !payload?.token || !payload.userId) {
+        throw new Error(getErrorMessage(payload, '登录失败'))
       }
       
-      const { token, userId } = await response.json()
+      const { token, userId } = payload
       
       // Save to localStorage
       localStorage.setItem('auth_token', token)
@@ -223,18 +268,18 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   register: async (email, password) => {
     try {
-      const response = await fetch('http://localhost:3000/api/auth/register', {
+      const response = await fetch(apiUrl('/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
+      const payload = await readJson<AuthResponse>(response)
       
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || '注册失败')
+      if (!response.ok || !payload?.token || !payload.userId) {
+        throw new Error(getErrorMessage(payload, '注册失败'))
       }
       
-      const { token, userId } = await response.json()
+      const { token, userId } = payload
       
       // Save to localStorage
       localStorage.setItem('auth_token', token)
@@ -253,7 +298,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   logout: () => {
     localStorage.removeItem('auth_token')
     localStorage.removeItem('user_id')
-    set({ isAuthenticated: false, userId: null, token: null })
+    set({ isAuthenticated: false, userId: null, token: null, syncStatus: 'idle' })
   },
 
   pullFromCloud: async () => {
@@ -264,37 +309,29 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       console.log('⬇️ Pulling notes from cloud...')
       
       // 获取云端所有笔记
-      const response = await fetch('http://localhost:3000/api/sync/notes', {
+      const response = await fetch(apiUrl('/sync/notes'), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       })
+      const cloudNotes = await readJson<CloudNote[]>(response)
 
-      if (!response.ok) {
+      if (!response.ok || !Array.isArray(cloudNotes)) {
         throw new Error('Failed to fetch cloud notes')
       }
 
-      const cloudNotes = await response.json()
       console.log(`📥 Received ${cloudNotes.length} notes from cloud`)
 
       // 将云端笔记同步到本地
       for (const cloudNote of cloudNotes) {
-        await window.api.upsertNoteFromCloud({
-          id: cloudNote.id,
-          title: cloudNote.encryptedTitle, // TODO: decrypt
-          content: cloudNote.encryptedContent, // TODO: decrypt
-          syncVersion: cloudNote.syncVersion,
-          createdAt: cloudNote.createdAt,
-          updatedAt: cloudNote.updatedAt,
-          deletedAt: cloudNote.deletedAt,
-        })
+        await window.api.upsertNoteFromCloud(toLocalCloudNote(cloudNote))
       }
 
       console.log('✅ Pull completed')
     } catch (err) {
       // 网络不可达（未启动同步服务器）时静默忽略，不影响本地功能
-      if (err instanceof TypeError && err.message.includes('fetch')) {
+      if (isFetchError(err)) {
         console.warn('⚠️ Sync server not reachable, skipping pull.')
         return
       }
@@ -319,11 +356,12 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       console.log(`⬆️ Pushing ${dirtyNotes.length} dirty notes to cloud...`)
       
       let successCount = 0
+      let conflictCount = 0
       let errorCount = 0
       
       for (const note of dirtyNotes) {
         try {
-          const response = await fetch('http://localhost:3000/api/sync/push', {
+          const response = await fetch(apiUrl('/sync/push'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -337,17 +375,22 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
               deletedAt: note.deleted_at,
             }),
           })
+          const payload = await readJson<SyncPushResponse | SyncConflictResponse>(response)
+
+          if (response.status === 409) {
+            console.warn(`⚠️ Sync conflict for note ${note.id}: ${getErrorMessage(payload, '版本冲突')}`)
+            conflictCount++
+            continue
+          }
           
-          if (!response.ok) {
-            const error = await response.json()
-            console.error(`❌ Failed to sync note ${note.id}:`, error)
+          if (!response.ok || !payload || !('note' in payload) || !payload.note) {
+            console.error(`❌ Failed to sync note ${note.id}:`, payload)
             errorCount++
           } else {
-            const result = await response.json()
             console.log(`✅ Pushed note: ${note.title || '(untitled)'}`)
             
             // 使用专用的 markSynced 方法更新同步状态
-            await window.api.markNoteSynced(note.id, result.note.syncVersion)
+            await window.api.markNoteSynced(note.id, payload.note.syncVersion)
             successCount++
           }
         } catch (err) {
@@ -356,8 +399,9 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         }
       }
       
-      set({ syncStatus: 'success' })
-      console.log(`🎉 Sync completed: ${successCount} pushed, ${errorCount} failed`)
+      const hasFailures = conflictCount > 0 || errorCount > 0
+      set({ syncStatus: hasFailures ? 'error' : 'success' })
+      console.log(`🎉 Sync completed: ${successCount} pushed, ${conflictCount} conflicts, ${errorCount} failed`)
       
       // 重新加载笔记列表
       await get().loadNotes()

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Query, Headers, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Headers, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { SyncService, PushNoteDto } from './sync.service';
 import { AuthService } from '../auth/auth.service';
 
@@ -24,8 +24,16 @@ export class SyncController {
     @Headers('authorization') auth?: string,
   ) {
     const userId = await this.getUserId(auth);
-    const note = await this.syncService.pushNote(userId, body);
-    return { success: true, note };
+    const result = await this.syncService.pushNote(userId, body);
+    if (result.status === 'conflict') {
+      throw new ConflictException({
+        message: 'Note version conflict',
+        status: result.status,
+        note: result.note,
+      });
+    }
+
+    return { success: true, status: result.status, note: result.note };
   }
 
   @Get('pull')

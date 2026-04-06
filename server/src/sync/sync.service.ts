@@ -13,7 +13,7 @@ export class SyncService {
    * Push a note update from the client.
    * The server stores encrypted content — it never sees plaintext.
    */
-  async pushNote(userId: string, noteData: PushNoteDto): Promise<Note> {
+  async pushNote(userId: string, noteData: PushNoteDto): Promise<PushNoteResult> {
     let note = await this.noteRepo.findOne({
       where: { id: noteData.id, userId },
     });
@@ -22,13 +22,15 @@ export class SyncService {
       // Update existing — the client's version must be >= server's
       if (noteData.syncVersion < note.syncVersion) {
         // Conflict: client is behind. Return server version for merge.
-        return note;
+        return { status: 'conflict', note };
       }
       note.encryptedTitle = noteData.encryptedTitle;
       note.encryptedContent = noteData.encryptedContent;
       note.yjsState = noteData.yjsState ? Buffer.from(noteData.yjsState) : null;
       note.syncVersion = note.syncVersion + 1;
       note.deletedAt = noteData.deletedAt ? new Date(noteData.deletedAt) : null;
+      const savedNote = await this.noteRepo.save(note);
+      return { status: 'updated', note: savedNote };
     } else {
       // Create new note
       note = this.noteRepo.create({
@@ -40,9 +42,9 @@ export class SyncService {
         syncVersion: 1,
         deletedAt: noteData.deletedAt ? new Date(noteData.deletedAt) : null,
       });
+      const savedNote = await this.noteRepo.save(note);
+      return { status: 'created', note: savedNote };
     }
-
-    return this.noteRepo.save(note);
   }
 
   /**
@@ -82,4 +84,9 @@ export interface PushNoteDto {
   yjsState?: number[];
   syncVersion: number;
   deletedAt?: string;
+}
+
+export interface PushNoteResult {
+  status: 'created' | 'updated' | 'conflict';
+  note: Note;
 }

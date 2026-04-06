@@ -8,6 +8,8 @@ export function App() {
   const loadTags = useNoteStore((s) => s.loadTags)
   const initAuth = useNoteStore((s) => s.initAuth)
   const isAuthenticated = useNoteStore((s) => s.isAuthenticated)
+  const createNote = useNoteStore((s) => s.createNote)
+  const selectNote = useNoteStore((s) => s.selectNote)
   const [showAuthModal, setShowAuthModal] = useState(false)
 
   useEffect(() => {
@@ -19,6 +21,15 @@ export function App() {
     }
     init()
   }, [initAuth, loadNotes, loadTags])
+
+  useEffect(() => {
+    return window.api.onCreateNewNote(async () => {
+      const note = await createNote()
+      if (note) {
+        selectNote(note.id)
+      }
+    })
+  }, [createNote, selectNote])
 
   return (
     <>

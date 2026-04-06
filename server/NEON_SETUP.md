@@ -1,170 +1,149 @@
 # Neon PostgreSQL 配置指南
 
-## ✅ 已完成配置
+## 目标
 
-你的 Neon 数据库已经配置完成！以下是使用步骤：
+这份文档用于指导你完成两件事：
 
----
-
-## 📋 连接信息
-
-你的数据库连接字符串已保存在 `server/.env` 文件中：
-
-```
-DATABASE_URL=postgresql://neondb_owner:npg_d7AUQNic3IWG@ep-snowy-haze-ai9kc8ud-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require
-```
-
-**重要提示**：
-- ⚠️ `.env` 文件已添加到 `.gitignore`，不会被提交到 Git
-- ⚠️ 请勿在公开场合分享你的数据库密码
-- 📝 `.env.example` 是示例文件，可以安全提交
+1. 在 Neon 控制台创建一个新的 PostgreSQL 项目
+2. 让当前项目的 NestJS 后端连接这个数据库
 
 ---
 
-## 🚀 快速开始
+## 第一步：在 Neon 创建数据库
 
-### 1. 安装依赖
+1. 打开 Neon 控制台并进入 Create project 弹窗。
+2. 在 Project name 填一个项目名，例如 `secure-notes`。
+3. Postgres version 保持默认即可。
+4. Cloud service provider 任选一个离你更近的区域。你截图里当前选的是 AWS，也可以切到 Azure。
+5. Region 选择离应用更近的区域，例如 `AWS US East 1`。
+6. Enable Neon Auth 先保持关闭。
+7. 点击 Create。
+
+项目创建完成后，进入数据库项目详情页，找到 Connection Details 或 Connection String。
+
+推荐复制 pooled connection string，格式通常类似：
+
+```env
+DATABASE_URL=postgresql://<user>:<password>@<pooled-host>/<database>?sslmode=require
+```
+
+---
+
+## 第二步：把连接串写入本地环境变量
+
+在 `server` 目录下创建 `.env` 文件，或复制 `.env.example` 为 `.env`，填写你刚才从 Neon 复制的连接串：
+
+```env
+DATABASE_URL=postgresql://<user>:<password>@<pooled-host>/<database>?sslmode=require
+JWT_SECRET=change-this-to-a-random-secret
+PORT=3000
+NODE_ENV=development
+```
+
+如果你更喜欢拆开配置，也可以使用下面这些变量：
+
+```env
+DB_HOST=<pooled-host>
+DB_PORT=5432
+DB_USER=<user>
+DB_PASSWORD=<password>
+DB_NAME=<database>
+JWT_SECRET=change-this-to-a-random-secret
+PORT=3000
+NODE_ENV=development
+```
+
+说明：
+
+- 当前项目现在优先读取 `DATABASE_URL`
+- 如果没有 `DATABASE_URL`，会自动回退到 `DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME`
+- `.env` 已被 `.gitignore` 忽略，不会提交到 Git
+
+---
+
+## 第三步：安装依赖并测试连接
+
+在 `server` 目录执行：
 
 ```bash
-cd server
 npm install
-```
-
-### 2. 测试数据库连接
-
-```bash
 npm run test:db
 ```
 
-或者直接运行测试脚本：
+如果连接成功，你会看到类似输出：
 
-```bash
-npx ts-node test-db.ts
-```
-
-**预期输出**：
-```
+```text
 ✅ 数据库连接成功!
 📊 数据库信息:
-   版本: PostgreSQL 16
-   数据库: neondb
-   用户: neondb_owner
+   版本: PostgreSQL 17
+   数据库: <database>
+   用户: <user>
 ```
 
-### 3. 启动开发服务器
+---
+
+## 第四步：启动后端并自动建表
+
+继续在 `server` 目录执行：
 
 ```bash
 npm run dev
 ```
 
-服务器将在 `http://localhost:3000` 启动。
+后端默认启动在 `http://localhost:3000`。
 
-首次启动时，TypeORM 会自动创建数据表：
-- `users` - 用户账户
-- `notes` - 加密笔记
+开发环境下，TypeORM 会自动创建数据表，包括：
+
+- `users`
+- `notes`
+- `images`
 
 ---
 
-## 🔧 配置说明
+## 当前项目里的实现方式
 
-### 已修改的文件
+数据库连接配置位于以下文件：
 
-1. **server/.env** - 数据库连接配置（已创建）
-2. **server/src/app.module.ts** - 添加了 SSL 支持和环境变量加载
-3. **server/package.json** - 添加了 `@nestjs/config` 和 `dotenv`
-4. **.gitignore** - 保护敏感信息不被提交
+1. `server/src/app.module.ts`：后端数据库初始化
+2. `server/test-db.ts`：数据库连接测试脚本
+3. `server/.env.example`：环境变量示例
 
-### SSL 配置
+当前实现已经包含：
 
-Neon 数据库需要 SSL 连接，已在 `app.module.ts` 中配置：
+- `DATABASE_URL` 优先支持
+- Neon 所需的 SSL 配置
+- 本地拆分变量兜底支持
+- 开发环境自动建表
 
-```typescript
-ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+---
+
+## 常见问题
+
+### 1. 连接失败
+
+优先检查：
+
+- `.env` 是否放在 `server/.env`
+- `DATABASE_URL` 是否来自 Neon 的 pooled connection string
+- 连接串里是否包含 `sslmode=require`
+
+### 2. SSL 错误
+
+Neon 需要 SSL。连接串里请保留：
+
+```text
+?sslmode=require
 ```
 
----
+### 3. 表没有创建
 
-## 📊 数据库管理
-
-### 使用 Neon 控制台
-
-访问 [Neon Console](https://console.neon.tech) 可以：
-- 查看数据库状态
-- 执行 SQL 查询
-- 查看连接统计
-- 管理备份
-
-### 使用 pgAdmin 或 DBeaver
-
-你也可以使用桌面客户端连接：
-
-**连接信息**：
-- 主机: `ep-snowy-haze-ai9kc8ud-pooler.c-4.us-east-1.aws.neon.tech`
-- 端口: `5432`
-- 数据库: `neondb`
-- 用户名: `neondb_owner`
-- 密码: `npg_d7AUQNic3IWG`
-- SSL 模式: `require`
+确认 `NODE_ENV` 不是 `production`，因为开发环境下才会自动 `synchronize`。
 
 ---
 
-## 🌐 API 端点
+## 安全建议
 
-服务器启动后可使用以下端点：
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/auth/register` | POST | 注册新用户 |
-| `/auth/login` | POST | 用户登录 |
-| `/sync/push` | POST | 推送笔记到云端 |
-| `/sync/pull` | GET | 拉取云端更新 |
-
----
-
-## 🔍 故障排查
-
-### 连接失败
-
-```bash
-# 检查环境变量是否加载
-cd server
-cat .env
-
-# 测试网络连接
-ping ep-snowy-haze-ai9kc8ud-pooler.c-4.us-east-1.aws.neon.tech
-```
-
-### SSL 错误
-
-确保连接字符串包含 `sslmode=require`：
-```
-?sslmode=require&channel_binding=require
-```
-
-### 表未创建
-
-首次运行时设置 `synchronize: true`（开发环境默认开启）：
-```typescript
-synchronize: process.env.NODE_ENV !== 'production'
-```
-
----
-
-## 📚 更多资源
-
-- [Neon 文档](https://neon.tech/docs)
-- [TypeORM 文档](https://typeorm.io/)
-- [NestJS 文档](https://docs.nestjs.com/)
-
----
-
-## 🔐 安全建议
-
-1. **生产环境**: 在 `.env` 中修改 `JWT_SECRET` 为随机字符串
-2. **定期备份**: Neon 免费版有自动备份，付费版可配置保留时长
-3. **IP 白名单**: 在 Neon 控制台配置允许访问的 IP（可选）
-4. **监控**: 留意 Neon 控制台的连接数和存储使用情况
-
----
-
-需要帮助？查看项目根目录的 `README.md` 或提交 Issue。
+1. 不要把真实连接串提交到仓库
+2. 不要把密码写进文档或截图
+3. 生产环境请替换 `JWT_SECRET`
+4. 优先使用 Neon 提供的 pooled 连接串，连接更稳定
