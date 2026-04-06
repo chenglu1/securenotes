@@ -3,6 +3,14 @@ import { initDatabase } from './database/connection'
 import { NotesRepository } from './database/repositories/notes'
 import { TagsRepository } from './database/repositories/tags'
 import { AttachmentsRepository } from './database/repositories/attachments'
+import {
+  clearAuthSession,
+  clearEncryptionKey,
+  getAuthSession,
+  getEncryptionKey,
+  saveAuthSession,
+  saveEncryptionKey,
+} from './secure-store'
 
 const notes = new NotesRepository()
 const tags = new TagsRepository()
@@ -40,6 +48,22 @@ export async function registerIpcHandlers(win: BrowserWindow | null) {
 
   ipcMain.handle('app:quit', () => {
     app.quit()
+  })
+
+  // ── Secure Auth Storage ───────────────────────────────
+  ipcMain.handle('auth:getSession', () => getAuthSession())
+  ipcMain.handle('auth:saveSession', (_e, session: { token: string; userId: string }) => {
+    saveAuthSession(session)
+  })
+  ipcMain.handle('auth:clearSession', () => {
+    clearAuthSession()
+  })
+  ipcMain.handle('auth:getEncryptionKey', (_e, userId: string) => getEncryptionKey(userId))
+  ipcMain.handle('auth:saveEncryptionKey', (_e, userId: string, key: string) => {
+    saveEncryptionKey(userId, key)
+  })
+  ipcMain.handle('auth:clearEncryptionKey', (_e, userId: string) => {
+    clearEncryptionKey(userId)
   })
 
   // ── Notes ──────────────────────────────────────────────

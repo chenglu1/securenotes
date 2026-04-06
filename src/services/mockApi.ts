@@ -24,6 +24,8 @@ let notes: Note[] = []
 let tags: Tag[] = []
 const noteTags: Map<string, string[]> = new Map()
 const noop = () => {}
+let authSession: { token: string; userId: string } | null = null
+const encryptionKeys = new Map<string, string>()
 
 export const mockApi = {
   getNotes: async () => notes.filter((n) => !n.deleted_at),
@@ -145,6 +147,20 @@ export const mockApi = {
   hideWindow: async () => undefined,
   showWindow: async () => undefined,
   quitApp: async () => undefined,
+  getAuthSession: async () => authSession,
+  saveAuthSession: async (session: { token: string; userId: string }) => {
+    authSession = session
+  },
+  clearAuthSession: async () => {
+    authSession = null
+  },
+  getEncryptionKey: async (userId: string) => encryptionKeys.get(userId) ?? null,
+  saveEncryptionKey: async (userId: string, key: string) => {
+    encryptionKeys.set(userId, key)
+  },
+  clearEncryptionKey: async (userId: string) => {
+    encryptionKeys.delete(userId)
+  },
   onMainProcessMessage: () => noop,
   onCreateNewNote: () => noop,
 }

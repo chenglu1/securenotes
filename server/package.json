@@ -6,9 +6,13 @@
   "license": "MIT",
   "scripts": {
     "start": "node dist/main.js",
+    "start:render": "npm run migration:run && npm run start",
     "dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "build": "tsc",
-    "test:db": "ts-node test-db.ts"
+    "test:db": "ts-node test-db.ts",
+    "typeorm": "node ./node_modules/typeorm/cli.js",
+    "migration:run": "npm run typeorm -- migration:run -d dist/database/data-source.js",
+    "migration:show": "npm run typeorm -- migration:show -d dist/database/data-source.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

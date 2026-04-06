@@ -46,6 +46,16 @@ const api = {
   showWindow: () => ipcRenderer.invoke('window:show'),
   quitApp: () => ipcRenderer.invoke('app:quit'),
 
+  // ── Secure Auth Storage ───────────────────────────────
+  getAuthSession: () => ipcRenderer.invoke('auth:getSession'),
+  saveAuthSession: (session: { token: string; userId: string }) =>
+    ipcRenderer.invoke('auth:saveSession', session),
+  clearAuthSession: () => ipcRenderer.invoke('auth:clearSession'),
+  getEncryptionKey: (userId: string) => ipcRenderer.invoke('auth:getEncryptionKey', userId),
+  saveEncryptionKey: (userId: string, key: string) =>
+    ipcRenderer.invoke('auth:saveEncryptionKey', userId, key),
+  clearEncryptionKey: (userId: string) => ipcRenderer.invoke('auth:clearEncryptionKey', userId),
+
   // ── App Events ─────────────────────────────────────────
   onMainProcessMessage: (callback: (message: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, message: string) => callback(message)

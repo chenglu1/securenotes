@@ -1,497 +1,139 @@
-# 🔒 SecureNotes
+# SecureNotes
 
-> 离线优先、支持云同步的安全笔记应用
+离线优先、支持云同步的 Electron 笔记应用。当前已经验证通过以下链路：
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Electron-28-47848F?logo=electron" />
-  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react" />
-  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript" />
-  <img src="https://img.shields.io/badge/Vite-5-646CFF?logo=vite" />
-  <img src="https://img.shields.io/badge/NestJS-10-E0234E?logo=nestjs" />
-  <img src="https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql" />
-  <img src="https://img.shields.io/badge/Tailwind-3.4-38BDF8?logo=tailwindcss" />
-</p>
+- 本地 Electron 编辑与保存
+- Render 上的 NestJS 后端部署
+- Neon PostgreSQL 云端同步
+- 打包生产构建默认连接 Render
 
----
+## 当前状态
 
-## ✨ 功能特性
+- 本地数据库：sql.js SQLite，保存在用户目录
+- 云端后端：Render
+- 云端数据库：Neon PostgreSQL
+- 认证：JWT + bcrypt
+- 同步：已验证 Electron -> Render -> Neon 成功
+- 图片上传：已接入服务端接口
+- 实时协作与端到端加密：尚未实现
 
-| 特性 | 状态 | 描述 |
-|------|------|------|
-| 📝 **富文本编辑** | ✅ 已实现 | 基于 TipTap 的 Markdown 编辑器，支持标题、列表、代码块、任务列表等 |
-| 💾 **离线优先** | ✅ 已实现 | 数据存储在本地 SQLite (sql.js WASM)，无网络也可正常使用 |
-| ☁️ **云同步** | ✅ 已实现 | 支持注册/登录，双向同步笔记到 Neon PostgreSQL，智能冲突解决 |
-| 🔄 **版本控制** | ✅ 已实现 | 基于 sync_version 的版本管理，保护本地未提交的修改 |
-| 🔍 **全文搜索** | ✅ 已实现 | 即时搜索笔记标题和内容 |
-| 🏷️ **标签系统** | ✅ 已实现 | 支持创建标签、为笔记添加标签 |
-| 📎 **附件管理** | ✅ 已实现 | 支持图片、PDF 等文件附件 |
-| 🌙 **暗色主题** | ✅ 已实现 | 精心设计的暗色 UI，使用 Tailwind CSS 和 CSS 变量 |
-| 🗑️ **软删除** | ✅ 已实现 | 笔记软删除 (deleted_at) 支持，可恢复误删数据 |
-| 🔐 **端到端加密** | 🚧 规划中 | 使用 libsodium 加密，服务端只存储密文 |
-| 🔄 **实时协作** | 🚧 规划中 | 基于 Yjs CRDT 的多人实时协作编辑 |
+## 快速开始
 
----
+### 本地开发
 
-## 🏗️ 技术架构
-
-```
-┌─────────────────────────────────────────────────────┐
-│                  Electron Client                     │
-│  ┌──────────────────────┐  ┌──────────────────────┐ │
-│  │   Renderer (React)   │  │   Main Process       │ │
-│  │                      │  │                      │ │
-│  │  ┌────────────────┐  │  │  ┌────────────────┐  │ │
-│  │  │  TipTap Editor │  │  │  │  IPC Handlers  │  │ │
-│  │  └───────┬────────┘  │  │  └───────┬────────┘  │ │
-│  │  ┌───────▼────────┐  │  │  ┌───────▼────────┐  │ │
-│  │  │ Zustand Store  │◄─┼──┼─►│   sql.js WASM  │  │ │
-│  │  │ (Auth + Sync)  │  │  │  │    (SQLite)    │  │ │
-│  │  └───────┬────────┘  │  │  │  ✅ 软删除      │  │ │
-│  │          │            │  │  │  ✅ 版本控制   │  │ │
-│  │  ┌───────▼────────┐  │  │  └────────────────┘  │ │
-│  │  │  Sync Engine   │  │  │                      │ │
-│  │  │  (Pull→Push)   │  │  │                      │ │
-│  │  └────────────────┘  │  │                      │ │
-│  └──────────────────────┘  └──────────────────────┘ │
-└────────────────┬────────────────────────────────────┘
-                 │ REST API (JWT)
-┌────────────────▼────────────────────────────────────┐
-│              NestJS Backend (server/)                │
-│  ┌──────────┐  ┌───────────┐  ┌──────────────────┐ │
-│  │ JWT Auth │  │ Sync API  │  │ WebSocket 协作    │ │
-│  │ ✅ 注册   │  │ ✅ Pull   │  │ 🚧 规划中        │ │
-│  │ ✅ 登录   │  │ ✅ Push   │  │                  │ │
-│  └────┬─────┘  └─────┬─────┘  └────────┬─────────┘ │
-│       └──────────┬───┘                  │           │
-│          ┌───────▼────────┐             │           │
-│          │ Neon PostgreSQL│             │           │
-│          │   (云数据库)   │             │           │
-│          └────────────────┘             │           │
-└─────────────────────────────────────────────────────┘
-```
-
-### 核心特性说明
-
-#### 🔄 **智能云同步**
-- **双向同步**: Pull (云端→本地) + Push (本地→云端)
-- **冲突解决**: 保护本地未提交的修改 (is_dirty 标记)
-- **版本控制**: 基于 sync_version 的增量更新
-- **自动恢复**: 应用启动时自动恢复登录状态并拉取更新
-
-#### 💾 **离线优先设计**
-- **本地数据库**: sql.js (WASM SQLite) 存储在 %APPDATA%/securenotes
-- **脏数据标记**: is_dirty 字段标记待同步的笔记
-- **软删除**: deleted_at 字段支持数据恢复
-
-### 技术栈
-
-| 层级 | 技术 |
-|------|------|
-| **前端框架** | React 19 + TypeScript |
-| **构建工具** | Vite 5 + vite-plugin-electron |
-| **桌面框架** | Electron 28 |
-| **样式方案** | Tailwind CSS 3.4 + CSS Variables |
-| **编辑器** | TipTap (ProseMirror) |
-| **状态管理** | Zustand |
-| **本地数据库** | sql.js (WASM 版 SQLite) |
-| **后端框架** | NestJS 10 + TypeORM |
-| **云数据库** | Neon PostgreSQL 17.8 |
-| **认证** | JWT + bcrypt |
-| **加密** | libsodium-wrappers (规划中) |
-| **CRDT** | Yjs (规划中) |
-
----
-
-## 🚀 快速开始
-
-### 前置要求
-
-- **Node.js** >= 18
-- **npm** >= 9
-- **PostgreSQL** (使用 Neon 云数据库，无需本地安装)
-
-### 安装与运行
-
-#### 1. 客户端 (Electron)
+1. 安装根目录依赖
 
 ```bash
-# 克隆项目
-git clone <repo-url>
-cd electron-vite-boilerplate
-
-# 安装依赖
 npm install
-
-# 启动开发模式 (Electron + Vite HMR)
-npm run dev
 ```
 
-#### 2. 后端服务器 (可选，启用云同步功能)
+2. 配置后端数据库
+
+参见 [server/NEON_SETUP.md](./server/NEON_SETUP.md)。
+
+3. 启动后端
 
 ```bash
-# 进入服务器目录
 cd server
-
-# 安装依赖
 npm install
-
-# 配置 Neon 数据库连接 (参见 server/NEON_SETUP.md)
-# 复制 .env.example 到 .env 并填写数据库连接字符串
-
-# 启动后端服务
 npm run dev
 ```
 
-后端服务器将在 `http://localhost:3000` 启动。
-
-### 使用云同步功能
-
-1. **注册账号**: 点击左下角登录图标 → 选择"注册" → 输入邮箱和密码
-2. **登录**: 输入注册的邮箱和密码
-3. **同步**: 点击左下角的"云同步"按钮，自动完成双向同步
-   - 先 Pull: 从云端下载更新
-   - 后 Push: 上传本地修改到云端
-
-**同步策略**:
-- ✅ 自动保护本地未提交的修改
-- ✅ 基于版本号的智能合并
-- ✅ 应用重启时自动恢复会话并拉取更新
-
-> 💡 详细使用指南参见 [CLOUD_SYNC_GUIDE.md](./CLOUD_SYNC_GUIDE.md)
-
----
-
-## � 文档
-
-- [📖 GUIDE.md](./GUIDE.md) - **Electron 开发完整教程** (从零开始学习 Electron，推荐新手阅读)
-- [☁️ CLOUD_SYNC_GUIDE.md](./CLOUD_SYNC_GUIDE.md) - **云同步功能使用指南**
-- [🗄️ server/NEON_SETUP.md](./server/NEON_SETUP.md) - **Neon PostgreSQL 配置指南**
-
----
-
-## �📁 项目结构
-
-```
-electron-vite-boilerplate/
-├── electron/                    # Electron 主进程
-│   ├── main.ts                  # 窗口创建 + 应用生命周期
-│   ├── preload.ts               # contextBridge API (IPC 桥接)
-│   ├── ipc-handlers.ts          # IPC 处理器注册
-│   ├── types/
-│   │   └── index.ts             # 共享类型定义 (Note, Tag, Attachment)
-│   └── database/
-│       ├── connection.ts        # sql.js 初始化 + 文件持久化
-│       └── repositories/
-│           ├── notes.ts         # 笔记 CRUD + 搜索
-│           ├── tags.ts          # 标签 CRUD + 关联
-│           └── attachments.ts   # 附件文件管理
-│
-├── src/                         # 渲染进程 (React)
-│   ├── main.tsx                 # React 入口
-│   ├── App.tsx                  # 根组件
-│   ├── vite-env.d.ts            # 类型声明 (window.api)
-│   ├── components/
-│   │   ├── layout/
-│   │   │   ├── AppShell.tsx     # 三栏布局
-│   │   │   └── Sidebar.tsx      # 搜索 + 笔记列表 + 同步状态
-│   │   └── editor/
-│   │       ├── EditorPane.tsx   # TipTap 编辑器 + 自动保存
-│   │       └── EditorToolbar.tsx# 格式化工具栏
-│   ├── stores/
-│   │   └── noteStore.ts         # Zustand 状态管理
-│   ├── services/
-│   │   ├── collaboration.ts     # Yjs 文档管理
-│   │   ├── syncEngine.ts        # 增量同步引擎
-│   │   ├── cryptoService.ts     # E2E 加密服务
-│   │   └── mockApi.ts           # 浏览器开发模式 Mock API
-│   ├── hooks/
-│   │   └── useCollaboration.ts  # Yjs 文档生命周期 Hook
-│   └── styles/
-│       └── index.css            # 暗色主题设计系统
-│
-├── server/                      # NestJS 后端
-│   └── src/
-│       ├── main.ts              # NestJS 启动
-│       ├── app.module.ts        # 根模块 (TypeORM + JWT)
-│       ├── entities/
-│       │   ├── note.entity.ts   # 笔记实体 (存储密文)
-│       │   └── user.entity.ts   # 用户实体
-│       ├── auth/
-│       │   ├── auth.module.ts
-│       │   ├── auth.service.ts  # 注册/登录 + JWT
-│       │   └── auth.controller.ts
-│       ├── sync/
-│       │   ├── sync.module.ts
-│       │   ├── sync.service.ts  # Push/Pull 同步
-│       │   └── sync.controller.ts
-│       └── collaboration/
-│           ├── collaboration.module.ts
-│           └── collaboration.gateway.ts  # WebSocket 网关
-│
-├── index.html                   # HTML 入口
-├── vite.config.ts               # Vite + React + Electron 配置
-├── tsconfig.json                # TypeScript 配置
-├── package.json
-└── electron-builder.json5       # Electron 打包配置
-```
-
----
-
-## 🔧 核心模块说明
-
-### 1. IPC 通信
-
-应用使用 Electron 的 `contextBridge` 进行安全的进程间通信：
-
-```
-Renderer (React)         Preload              Main Process
-───────────────         ─────────             ──────────────
-window.api.xxx()  →  ipcRenderer.invoke()  →  ipcMain.handle()
-                                               │
-                                               ▼
-                                           Repository
-                                               │
-                                               ▼
-                                           sql.js DB
-```
-
-`window.api` 提供的方法：
-
-| 方法 | 说明 |
-|------|------|
-| `getNotes()` | 获取所有未删除的笔记 |
-| `createNote(data)` | 创建笔记 |
-| `updateNote(id, data)` | 更新笔记 (自动标记 is_dirty) |
-| `deleteNote(id)` | 软删除笔记 (设置 deleted_at) |
-| `searchNotes(query)` | 搜索笔记标题和内容 |
-| `getDirtyNotes()` | 获取所有待同步的笔记 (is_dirty=1) |
-| `markNoteSynced(id, version)` | 标记笔记已同步 (清除 is_dirty，更新 sync_version) |
-| `upsertNoteFromCloud(note)` | 从云端插入/更新笔记 (智能冲突解决) |
-| `getTags()` | 获取所有标签 |
-| `createTag(data)` | 创建标签 |
-| `addTagToNote(noteId, tagId)` | 添加标签到笔记 |
-| `addAttachment(noteId, path)` | 添加附件 |
-
-### 2. 数据库 (sql.js)
-
-使用 WASM 版 SQLite，无需原生编译：
-
-- **初始化**: 应用启动时异步加载 WASM 二进制
-- **持久化**: 每次写操作后调用 `saveDatabase()` 将内存数据写入磁盘
-- **存储位置**: `%APPDATA%/electron-vite-boilerplate/securenotes.db`
-
-### 3. TipTap 编辑器
-
-编辑器配置了以下扩展：
-
-| 扩展 | 功能 |
-|------|------|
-| `StarterKit` | 基础格式 (段落、标题、列表、引用等) |
-| `Placeholder` | 空内容提示文字 |
-| `Highlight` | 文字高亮 |
-| `TaskList/TaskItem` | 任务列表 (复选框) |
-| `Link` | 超链接 (自动检测) |
-| `Image` | 图片插入 |
-| `Collaboration` | Yjs CRDT 协作 (预留) |
-
-### 4. 端到端加密 (规划中)
-
-```
-用户密码 → Argon2id → 主密钥
-                        │
-                        ▼
-                 笔记内容 → XSalsa20-Poly1305 加密 → 密文
-                                                     │
-                                                     ▼
-                                              存储/传输到服务器
-```
-
-- **密钥派生**: Argon2id (抗 GPU 暴力破解)
-- **对称加密**: XSalsa20-Poly1305 (AEAD)
-- **密钥分享**: Sealed Box (匿名公钥加密)
-
-**当前状态**: 云端数据库已预留 `encrypted_title` 和 `encrypted_content` 字段，加密实现待开发。
-
-### 5. 同步引擎 (已实现)
-
-```
-应用启动 → initAuth() → 恢复会话 → pullFromCloud()
-                                      ↓
-本地修改 → 标记 is_dirty → 用户点击"云同步" → syncToCloud()
-                                              ↓
-                                    Pull (拉取云端更新)
-                                              ↓
-                                    智能合并 (保护本地脏数据)
-                                              ↓
-                                    Push (上传本地修改)
-                                              ↓
-                                    标记已同步 (is_dirty=0)
-```
-
-**冲突解决策略**:
-- 本地有未提交修改 (is_dirty=1) 时，跳过云端更新
-- 仅当云端版本严格大于本地版本时才覆盖 (syncVersion > localVersion)
-
-### 6. 实时协作 (规划中)
-
-| 端点 | 方法 | 说明 | 状态 |
-|------|------|------|------|
-| `/api/auth/register` | POST | 注册用户 | ✅ 已实现 |
-| `/api/auth/login` | POST | 登录获取 JWT | ✅ 已实现 |
-| `/api/sync/push` | POST | 推送本地笔记变更到云端 | ✅ 已实现 |
-| `/api/sync/notes` | GET | 获取所有云端笔记 (Pull) | ✅ 已实现 |
-| `/api/sync/pull?since=N` | GET | 增量拉取更新 | 🚧 规划中 |
-| WebSocket `/collaboration` | - | 实时协作 (Yjs 更新转发) | 🚧 规划中 |
-
-**已实现的同步流程**:
-```
-1. 客户端调用 pullFromCloud()
-   → GET /api/sync/notes (获取所有云端笔记) 
-   → 本地 upsertNoteFromCloud() (智能合并)
-   
-2. 客户端调用 syncToCloud()
-   → 先执行 Pull 同步
-   → 再获取本地 dirty notes
-   → POST /api/sync/push (批量上传)
-   → 标记已同步 (is_dirty=0)
-```
-
----
-
-## 🛠️ 开发指南
-
-### 常用命令
+4. 启动 Electron 客户端
 
 ```bash
-npm run dev          # 启动开发 (Vite HMR + Electron)
-npm run build        # 构建生产版本 + 打包 Electron
-npm run preview      # 预览构建结果
+cd ..
+npm run dev
 ```
 
-### 添加新的 IPC 方法
+### 验证云同步
 
-1. 在 `electron/types/index.ts` 添加类型
-2. 在对应的 `repositories/` 中添加数据操作方法
-3. 在 `electron/ipc-handlers.ts` 注册 `ipcMain.handle`
-4. 在 `electron/preload.ts` 暴露方法到 `window.api`
-5. 在 `src/services/mockApi.ts` 添加对应的 mock 实现
+1. 在客户端注册或登录账号
+2. 新建一条笔记
+3. 点击左下角“云同步”
+4. 在 Neon 控制台检查 `notes` 表是否出现新记录
 
-### 添加新的编辑器功能
+## 生产打包
 
-1. 安装 TipTap 扩展: `npm install @tiptap/extension-xxx`
-2. 在 `EditorPane.tsx` 的 `extensions` 数组中注册
-3. 在 `EditorToolbar.tsx` 添加工具栏按钮
+根目录的 [.env.production](./.env.production) 用于打包时注入线上 API 地址。
 
-### 浏览器开发模式
+当前默认配置为：
 
-直接访问 `http://localhost:5173` 可以在浏览器中预览 UI，无需启动 Electron。此模式使用 `mockApi.ts` 提供的内存数据，不持久化。
+```env
+VITE_API_BASE_URL=https://securenotes-server.onrender.com/api
+```
 
----
-
-## 📦 构建与打包
+执行下面命令会生成生产构建，并让打包后的客户端默认连接 Render：
 
 ```bash
-# 构建生产版本
 npm run build
 ```
 
-生成文件位于 `release/` 目录。打包配置见 `electron-builder.json5`。
+说明：当前已经验证 `vite build` 和 Electron 生产资源构建通过；如果 `electron-builder` 在 Windows 上失败，需要单独处理打包层问题。
 
----
+## Render 部署
 
-## 🤝 实时协作 (规划中)
+仓库根目录的 [render.yaml](./render.yaml) 可直接用于 Render Blueprint 部署。
 
-> ⚠️ **开发状态**: 后端已预留 WebSocket 网关，前端协作功能待实现
+Render 运行时需要的关键环境变量：
 
-```mermaid
-graph LR
-  A[用户 A 编辑] --> B[Yjs 生成 Update]
-  B --> C[WebSocket 发送]
-  C --> D[服务端转发]
-  D --> E[用户 B 接收]
-  E --> F[Yjs 合并 CRDT]
-  F --> G[UI 自动更新]
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `NODE_ENV=production`
+- `DB_SYNCHRONIZE=true`
+
+后端健康检查地址：
+
+```text
+/api/health
 ```
 
-**设计方案**:
-1. 每个笔记对应一个 `Y.Doc` 实例
-2. 编辑操作生成 Yjs Update (增量二进制)
-3. 通过 WebSocket 转发给同一笔记的其他协作者
-4. CRDT 算法自动解决冲突，无需手动合并
+## 项目结构
 
----
-
-## 📋 数据库表结构
-
-### 本地数据库 (SQLite - sql.js)
-
-```sql
--- 笔记
-CREATE TABLE notes (
-  id            TEXT PRIMARY KEY,     -- UUID
-  title         TEXT DEFAULT '',
-  content       TEXT DEFAULT '',      -- TipTap HTML
-  created_at    TEXT,
-  updated_at    TEXT,
-  deleted_at    TEXT,                 -- 软删除 (NULL = 活跃)
-  sync_version  INTEGER DEFAULT 0,    -- 云端版本号
-  is_dirty      INTEGER DEFAULT 1     -- 待同步标记 (1 = 有本地修改)
-);
-
--- 标签
-CREATE TABLE tags (
-  id    TEXT PRIMARY KEY,
-  name  TEXT UNIQUE,
-  color TEXT DEFAULT '#6366f1'
-);
-
--- 笔记-标签关联
-CREATE TABLE note_tags (
-  note_id TEXT REFERENCES notes(id),
-  tag_id  TEXT REFERENCES tags(id),
-  PRIMARY KEY (note_id, tag_id)
-);
-
--- 附件
-CREATE TABLE attachments (
-  id          TEXT PRIMARY KEY,
-  note_id     TEXT REFERENCES notes(id),
-  filename    TEXT,
-  mime_type   TEXT,
-  size_bytes  INTEGER,
-  file_path   TEXT,                   -- userData 下的相对路径
-  created_at  TEXT
-);
+```text
+electron-vite-boilerplate/
+├── electron/
+│   ├── main.ts
+│   ├── preload.ts
+│   ├── ipc-handlers.ts
+│   ├── tray.ts
+│   └── database/
+│       ├── connection.ts
+│       └── repositories/
+├── src/
+│   ├── App.tsx
+│   ├── main.tsx
+│   ├── components/
+│   │   ├── auth/
+│   │   ├── editor/
+│   │   └── layout/
+│   ├── services/
+│   │   ├── api.ts
+│   │   └── mockApi.ts
+│   ├── stores/
+│   │   └── noteStore.ts
+│   └── styles/
+├── server/
+│   ├── .env.example
+│   ├── NEON_SETUP.md
+│   ├── test-db.ts
+│   └── src/
+│       ├── app.module.ts
+│       ├── main.ts
+│       ├── auth/
+│       ├── sync/
+│       ├── upload/
+│       ├── health/
+│       ├── collaboration/
+│       └── entities/
+├── .env.production
+├── render.yaml
+├── electron-builder.json5
+└── package.json
 ```
 
-### 云数据库 (PostgreSQL - Neon)
+## 保留文档
 
-```sql
--- 用户
-CREATE TABLE users (
-  id         SERIAL PRIMARY KEY,
-  email      VARCHAR(255) UNIQUE NOT NULL,
-  password   VARCHAR(255) NOT NULL,       -- bcrypt 哈希
-  created_at TIMESTAMP DEFAULT NOW()
-);
+- [server/NEON_SETUP.md](./server/NEON_SETUP.md)：Neon 数据库接入说明
 
--- 笔记 (仅存储已提交的版本)
-CREATE TABLE notes (
-  id              UUID PRIMARY KEY,
-  user_id         INTEGER REFERENCES users(id),
-  title           TEXT,
-  content         TEXT,                    -- TipTap HTML
-  encrypted_title TEXT,                    -- 预留加密字段
-  encrypted_content TEXT,                  -- 预留加密字段
-  created_at      TIMESTAMP,
-  updated_at      TIMESTAMP,
-  deleted_at      TIMESTAMP,               -- 软删除
-  sync_version    INTEGER DEFAULT 1        -- 每次修改 +1
-);
-```
-
----
-
-## 📄 License
-
-MIT
+README 保留为唯一的项目入口说明，避免多份文档重复维护。

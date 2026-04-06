@@ -18,6 +18,7 @@
     ]
   },
   "win": {
+    "signAndEditExecutable": false,
     "target": [
       {
         "target": "nsis",

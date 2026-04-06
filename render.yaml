@@ -5,7 +5,7 @@ services:
     rootDir: server
     plan: free
     buildCommand: npm install --include=dev && npm run build
-    startCommand: npm run start
+    startCommand: npm run start:render
     healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
@@ -15,4 +15,4 @@ services:
       - key: NODE_ENV
         value: production
       - key: DB_SYNCHRONIZE
-        value: true
+        value: false

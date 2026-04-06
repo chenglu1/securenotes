@@ -14,6 +14,9 @@ export class User {
   @Column({ type: 'text', nullable: true })
   publicKey!: string | null; // Base64-encoded public key for sealed box encryption
 
+  @Column({ type: 'text', nullable: true })
+  keySalt!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 }

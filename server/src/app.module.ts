@@ -7,31 +7,7 @@ import { SyncModule } from './sync/sync.module';
 import { CollaborationModule } from './collaboration/collaboration.module';
 import { UploadModule } from './upload/upload.module';
 import { HealthModule } from './health/health.module';
-import { Note } from './entities/note.entity';
-import { User } from './entities/user.entity';
-import { Image } from './entities/image.entity';
-
-function getDatabasePort(rawPort: string | undefined): number {
-  const parsedPort = Number.parseInt(rawPort ?? '5432', 10);
-  return Number.isNaN(parsedPort) ? 5432 : parsedPort;
-}
-
-function parseBooleanEnv(rawValue: string | undefined): boolean | undefined {
-  if (!rawValue) {
-    return undefined;
-  }
-
-  const normalizedValue = rawValue.trim().toLowerCase();
-  if (normalizedValue === 'true') {
-    return true;
-  }
-
-  if (normalizedValue === 'false') {
-    return false;
-  }
-
-  return undefined;
-}
+import { createBaseDatabaseOptions } from './database/database.config';
 
 @Module({
   imports: [
@@ -45,39 +21,16 @@ function parseBooleanEnv(rawValue: string | undefined): boolean | undefined {
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const databaseUrl = configService.get<string>('DATABASE_URL')?.trim();
-        const databaseHost = configService.get<string>('DB_HOST')?.trim();
-        const shouldSynchronize =
-          parseBooleanEnv(configService.get<string>('DB_SYNCHRONIZE')) ??
-          configService.get<string>('NODE_ENV') !== 'production';
-        const shouldUseSsl = Boolean(
-          databaseUrl?.includes('sslmode=require') ||
-            databaseUrl?.includes('.neon.tech') ||
-            databaseHost?.includes('neon.tech'),
-        );
-
-        return {
-          type: 'postgres',
-          ...(databaseUrl
-            ? {
-                url: databaseUrl,
-              }
-            : {
-                host: databaseHost || 'localhost',
-                port: getDatabasePort(configService.get<string>('DB_PORT')),
-                username: configService.get<string>('DB_USER') || 'postgres',
-                password: configService.get<string>('DB_PASSWORD') || 'postgres',
-                database: configService.get<string>('DB_NAME') || 'securenotes',
-              }),
-          ssl: shouldUseSsl ? { rejectUnauthorized: false } : false,
-          entities: [Note, User, Image],
-          synchronize: shouldSynchronize,
-          logging: configService.get<string>('NODE_ENV') === 'development',
-          extra: {
-            max: 10,
-            connectionTimeoutMillis: 10000,
-          },
-        };
+        return createBaseDatabaseOptions({
+          DATABASE_URL: configService.get<string>('DATABASE_URL'),
+          DB_HOST: configService.get<string>('DB_HOST'),
+          DB_PORT: configService.get<string>('DB_PORT'),
+          DB_USER: configService.get<string>('DB_USER'),
+          DB_PASSWORD: configService.get<string>('DB_PASSWORD'),
+          DB_NAME: configService.get<string>('DB_NAME'),
+          DB_SYNCHRONIZE: configService.get<string>('DB_SYNCHRONIZE'),
+          NODE_ENV: configService.get<string>('NODE_ENV'),
+        });
       },
     }),
 

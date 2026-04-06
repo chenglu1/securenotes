@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiUrl, getErrorMessage, isFetchError, readJson } from '../services/api'
+import { decryptText, deriveEncryptionKey, encryptText } from '../services/crypto'
 
 export interface Note {
   id: string
@@ -21,6 +22,7 @@ export interface Tag {
 interface AuthResponse {
   token: string
   userId: string
+  keySalt: string
   message?: string | string[]
   error?: string
 }
@@ -74,6 +76,7 @@ interface NoteStore {
   isAuthenticated: boolean
   userId: string | null
   token: string | null
+  encryptionKey: string | null
   syncStatus: 'idle' | 'syncing' | 'success' | 'error'
 
   // ── Actions ──
@@ -92,7 +95,7 @@ interface NoteStore {
   initAuth: () => Promise<void>
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
   pullFromCloud: () => Promise<void>
   syncToCloud: () => Promise<void>
 }
@@ -105,9 +108,10 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   isLoading: false,
   
   // Auth state
-  isAuthenticated: !!localStorage.getItem('auth_token'),
-  userId: localStorage.getItem('user_id'),
-  token: localStorage.getItem('auth_token'),
+  isAuthenticated: false,
+  userId: null,
+  token: null,
+  encryptionKey: null,
   syncStatus: 'idle',
 
   loadNotes: async () => {
@@ -219,16 +223,34 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   // ── Auth Methods ──
   initAuth: async () => {
-    const token = localStorage.getItem('auth_token')
-    const userId = localStorage.getItem('user_id')
+    let session = await window.api.getAuthSession()
+
+    if (!session) {
+      const legacyToken = localStorage.getItem('auth_token')
+      const legacyUserId = localStorage.getItem('user_id')
+      if (legacyToken && legacyUserId) {
+        session = { token: legacyToken, userId: legacyUserId }
+        await window.api.saveAuthSession(session)
+        localStorage.removeItem('auth_token')
+        localStorage.removeItem('user_id')
+      }
+    }
     
-    if (token && userId) {
+    if (session?.token && session.userId) {
+      const encryptionKey = await window.api.getEncryptionKey(session.userId)
       console.log('🔐 Found saved auth, restoring session...')
-      set({ isAuthenticated: true, userId, token })
+      set({
+        isAuthenticated: true,
+        userId: session.userId,
+        token: session.token,
+        encryptionKey,
+      })
       
       // 登录后自动拉取云端数据
       try {
-        await get().pullFromCloud()
+        if (encryptionKey) {
+          await get().pullFromCloud()
+        }
         await get().loadNotes()
         console.log('✅ Session restored and synced')
       } catch (err) {
@@ -250,13 +272,15 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         throw new Error(getErrorMessage(payload, '登录失败'))
       }
       
-      const { token, userId } = payload
+      const { token, userId, keySalt } = payload
+      const encryptionKey = await deriveEncryptionKey(password, keySalt)
       
-      // Save to localStorage
-      localStorage.setItem('auth_token', token)
-      localStorage.setItem('user_id', userId)
+      await window.api.saveAuthSession({ token, userId })
+      await window.api.saveEncryptionKey(userId, encryptionKey)
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('user_id')
       
-      set({ isAuthenticated: true, userId, token })
+      set({ isAuthenticated: true, userId, token, encryptionKey })
       
       // Sync after login
       await get().syncToCloud()
@@ -279,13 +303,15 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         throw new Error(getErrorMessage(payload, '注册失败'))
       }
       
-      const { token, userId } = payload
+      const { token, userId, keySalt } = payload
+      const encryptionKey = await deriveEncryptionKey(password, keySalt)
       
-      // Save to localStorage
-      localStorage.setItem('auth_token', token)
-      localStorage.setItem('user_id', userId)
+      await window.api.saveAuthSession({ token, userId })
+      await window.api.saveEncryptionKey(userId, encryptionKey)
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('user_id')
       
-      set({ isAuthenticated: true, userId, token })
+      set({ isAuthenticated: true, userId, token, encryptionKey })
       
       // Sync after register
       await get().syncToCloud()
@@ -295,15 +321,26 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     }
   },
 
-  logout: () => {
+  logout: async () => {
+    const { userId } = get()
+    await window.api.clearAuthSession()
+    if (userId) {
+      await window.api.clearEncryptionKey(userId)
+    }
     localStorage.removeItem('auth_token')
     localStorage.removeItem('user_id')
-    set({ isAuthenticated: false, userId: null, token: null, syncStatus: 'idle' })
+    set({
+      isAuthenticated: false,
+      userId: null,
+      token: null,
+      encryptionKey: null,
+      syncStatus: 'idle',
+    })
   },
 
   pullFromCloud: async () => {
-    const { token } = get()
-    if (!token) return
+    const { token, encryptionKey } = get()
+    if (!token || !encryptionKey) return
 
     try {
       console.log('⬇️ Pulling notes from cloud...')
@@ -325,7 +362,20 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
       // 将云端笔记同步到本地
       for (const cloudNote of cloudNotes) {
-        await window.api.upsertNoteFromCloud(toLocalCloudNote(cloudNote))
+        try {
+          const decryptedTitle = await decryptText(cloudNote.encryptedTitle, encryptionKey)
+          const decryptedContent = await decryptText(cloudNote.encryptedContent, encryptionKey)
+
+          await window.api.upsertNoteFromCloud(
+            toLocalCloudNote({
+              ...cloudNote,
+              encryptedTitle: decryptedTitle,
+              encryptedContent: decryptedContent,
+            }),
+          )
+        } catch (decryptError) {
+          console.error(`❌ Failed to decrypt note ${cloudNote.id}:`, decryptError)
+        }
       }
 
       console.log('✅ Pull completed')
@@ -341,8 +391,8 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   },
 
   syncToCloud: async () => {
-    const { token } = get()
-    if (!token) return
+    const { token, encryptionKey } = get()
+    if (!token || !encryptionKey) return
 
     set({ syncStatus: 'syncing' })
     
@@ -361,6 +411,9 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       
       for (const note of dirtyNotes) {
         try {
+          const encryptedTitle = await encryptText(note.title, encryptionKey)
+          const encryptedContent = await encryptText(note.content, encryptionKey)
+
           const response = await fetch(apiUrl('/sync/push'), {
             method: 'POST',
             headers: {
@@ -369,8 +422,8 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
             },
             body: JSON.stringify({
               id: note.id,
-              encryptedTitle: note.title, // TODO: encrypt
-              encryptedContent: note.content, // TODO: encrypt
+              encryptedTitle,
+              encryptedContent,
               syncVersion: note.sync_version,
               deletedAt: note.deleted_at,
             }),
