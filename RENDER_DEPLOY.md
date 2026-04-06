@@ -112,7 +112,7 @@ Render 需要从 GitHub 拉代码部署。
 - Service Type: Web Service
 - Root Directory: `server`
 - Runtime: `Node`
-- Build Command: `npm install && npm run build`
+- Build Command: `npm install --include=dev && npm run build`
 - Start Command: `npm run start`
 - Health Check Path: `/api/health`
 - Plan: `Free`
@@ -127,6 +127,8 @@ DB_SYNCHRONIZE=true
 ```
 
 这里使用 `NODE_ENV=production`，并单独通过 `DB_SYNCHRONIZE=true` 开启自动建表。这样 Render 上的运行方式更接近真实部署，同时仍然适合你的学习场景。
+
+之所以 build command 要显式加 `--include=dev`，是因为后端构建依赖 `typescript` 等开发依赖；在 `NODE_ENV=production` 的情况下，默认 `npm install` 可能不会安装它们，进而导致 Render 构建失败。
 
 ---
 
