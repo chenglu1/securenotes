@@ -10,7 +10,6 @@ export function App() {
   const isAuthenticated = useNoteStore((s) => s.isAuthenticated)
   const syncStatus = useNoteStore((s) => s.syncStatus)
   const createNote = useNoteStore((s) => s.createNote)
-  const selectNote = useNoteStore((s) => s.selectNote)
   const [showAuthModal, setShowAuthModal] = useState(false)
 
   useEffect(() => {
@@ -25,12 +24,9 @@ export function App() {
 
   useEffect(() => {
     return window.api.onCreateNewNote(async () => {
-      const note = await createNote()
-      if (note) {
-        selectNote(note.id)
-      }
+      await createNote()
     })
-  }, [createNote, selectNote])
+  }, [createNote])
 
   useEffect(() => {
     if (syncStatus === 'reauth-required') {

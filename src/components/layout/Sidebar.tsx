@@ -72,16 +72,14 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
   const userId = useNoteStore((s) => s.userId)
   const userEmail = useNoteStore((s) => s.userEmail)
   const syncStatus = useNoteStore((s) => s.syncStatus)
+  const syncAllStatus = useNoteStore((s) => s.syncAllStatus)
   const syncToCloud = useNoteStore((s) => s.syncToCloud)
   const logout = useNoteStore((s) => s.logout)
   const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase())
 
   const handleCreateNote = useCallback(async () => {
-    const note = await createNote()
-    if (note) {
-      selectNote(note.id)
-    }
-  }, [createNote, selectNote])
+    await createNote()
+  }, [createNote])
 
   const visibleNotes = useMemo(() => {
     if (!deferredSearchQuery) {
@@ -92,35 +90,36 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
   }, [notes, deferredSearchQuery])
 
   const dirtyCount = notes.filter((note) => note.is_dirty).length
+  const isReauthRequired = syncStatus === 'reauth-required'
   const syncTone = isAuthenticated
-    ? syncStatus === 'error'
+    ? syncAllStatus === 'error'
       ? 'error'
-      : syncStatus === 'syncing'
+      : syncAllStatus === 'syncing'
         ? 'syncing'
         : dirtyCount > 0
           ? 'pending'
           : 'success'
-    : syncStatus === 'reauth-required'
+    : isReauthRequired
       ? 'warning'
       : 'local'
   const syncLabel = isAuthenticated
-    ? syncStatus === 'syncing'
+    ? syncAllStatus === 'syncing'
       ? '同步中'
       : dirtyCount > 0
         ? '未同步'
-      : syncStatus === 'success'
+      : syncAllStatus === 'success'
         ? '已同步'
-        : syncStatus === 'error'
+        : syncAllStatus === 'error'
           ? '同步失败'
           : '已连接'
-    : syncStatus === 'reauth-required'
+    : isReauthRequired
       ? '需重新登录'
       : '本地模式'
   const footerText = isAuthenticated
     ? dirtyCount > 0
       ? `${dirtyCount} 条改动待同步`
       : '云端与本地已同步'
-    : syncStatus === 'reauth-required'
+    : isReauthRequired
       ? '请重新登录恢复同步'
       : '当前仅本地保存'
   const metaText = deferredSearchQuery
@@ -138,7 +137,7 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
     : '本地优先，登录后再同步到你的云端空间。'
   const footerHint = isAuthenticated
     ? '当前列表只显示这个账号下的笔记'
-    : syncStatus === 'reauth-required'
+    : isReauthRequired
       ? '重新登录后恢复加密同步'
       : '登录后可在多端访问同一账号内容'
 
@@ -211,12 +210,12 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
         {isAuthenticated ? (
           <Button
             size="large"
-            icon={syncStatus === 'syncing' ? <SyncOutlined spin /> : <CloudSyncOutlined />}
+            icon={syncAllStatus === 'syncing' ? <SyncOutlined spin /> : <CloudSyncOutlined />}
             className="secondary-action"
-            loading={syncStatus === 'syncing'}
+            loading={syncAllStatus === 'syncing'}
             onClick={() => void syncToCloud()}
           >
-            同步
+            同步全部
           </Button>
         ) : (
           <Button
@@ -225,7 +224,7 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
             className="secondary-action"
             onClick={onShowAuth}
           >
-            {syncStatus === 'reauth-required' ? '重新登录' : '登录'}
+            {isReauthRequired ? '重新登录' : '登录'}
           </Button>
         )}
       </div>
@@ -249,7 +248,7 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
               key={note.id}
               type="button"
               className={`note-list-item ${selectedNoteId === note.id ? 'is-active' : ''}`}
-              onClick={() => selectNote(note.id)}
+              onClick={() => void selectNote(note.id)}
             >
               <div className="note-list-item__head">
                 <Typography.Text className="note-title" strong ellipsis>

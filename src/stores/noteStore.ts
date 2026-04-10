@@ -57,6 +57,12 @@ interface SyncConflictResponse {
   error?: string
 }
 
+type EditorFlushHandler = () => Promise<void>
+type SyncStatus = 'idle' | 'reauth-required'
+type SyncActionStatus = 'idle' | 'syncing' | 'success' | 'error'
+
+let noteSelectionRequestVersion = 0
+
 type PushNoteResult =
   | { status: 'success'; note: CloudNote }
   | { status: 'conflict'; note?: CloudNote; message: string }
@@ -321,6 +327,8 @@ interface NoteStore {
   // ── State ──
   notes: Note[]
   selectedNoteId: string | null
+  activeEditorNoteId: string | null
+  activeEditorFlush: EditorFlushHandler | null
   searchQuery: string
   tags: Tag[]
   isLoading: boolean
@@ -331,11 +339,16 @@ interface NoteStore {
   userEmail: string | null
   token: string | null
   encryptionKey: string | null
-  syncStatus: 'idle' | 'syncing' | 'success' | 'error' | 'reauth-required'
+  syncStatus: SyncStatus
+  syncAllStatus: SyncActionStatus
+  syncCurrentStatus: SyncActionStatus
 
   // ── Actions ──
   loadNotes: () => Promise<void>
-  selectNote: (id: string | null) => void
+  flushActiveEditor: () => Promise<void>
+  registerActiveEditorFlush: (noteId: string, flushHandler: EditorFlushHandler) => void
+  unregisterActiveEditorFlush: (noteId: string) => void
+  selectNote: (id: string | null) => Promise<void>
   createNote: () => Promise<Note | null>
   updateNote: (id: string, data: { title?: string; content?: string }) => Promise<void>
   deleteNote: (id: string) => Promise<void>
@@ -350,12 +363,15 @@ interface NoteStore {
   register: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   pullFromCloud: () => Promise<void>
+  syncNoteToCloud: (noteId: string) => Promise<void>
   syncToCloud: () => Promise<void>
 }
 
 export const useNoteStore = create<NoteStore>((set, get) => ({
   notes: [],
   selectedNoteId: null,
+  activeEditorNoteId: null,
+  activeEditorFlush: null,
   searchQuery: '',
   tags: [],
   isLoading: false,
@@ -367,6 +383,8 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   token: null,
   encryptionKey: null,
   syncStatus: 'idle',
+  syncAllStatus: 'idle',
+  syncCurrentStatus: 'idle',
 
   loadNotes: async () => {
     set({ isLoading: true })
@@ -379,18 +397,55 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     }
   },
 
-  selectNote: (id) => {
-    set({ selectedNoteId: id })
+  flushActiveEditor: async () => {
+    const flushHandler = get().activeEditorFlush
+    if (!flushHandler) {
+      return
+    }
+
+    try {
+      await flushHandler()
+    } catch (err) {
+      console.error('Failed to flush active editor:', err)
+    }
+  },
+
+  registerActiveEditorFlush: (noteId, flushHandler) => {
+    set({ activeEditorNoteId: noteId, activeEditorFlush: flushHandler })
+  },
+
+  unregisterActiveEditorFlush: (noteId) => {
+    set((state) =>
+      state.activeEditorNoteId === noteId
+        ? { activeEditorNoteId: null, activeEditorFlush: null }
+        : {},
+    )
+  },
+
+  selectNote: async (id) => {
+    const currentId = get().selectedNoteId
+    if (id === currentId) {
+      return
+    }
+
+    const requestVersion = ++noteSelectionRequestVersion
+    await get().flushActiveEditor()
+    if (requestVersion !== noteSelectionRequestVersion) {
+      return
+    }
+
+    set({ selectedNoteId: id, syncCurrentStatus: 'idle' })
   },
 
   createNote: async () => {
     try {
+      await get().flushActiveEditor()
       const note = await window.api.createNote({
         title: '',
         content: '',
       })
       const notes = await window.api.getNotes()
-      set({ notes, selectedNoteId: note.id, syncStatus: 'idle' })
+      set({ notes, selectedNoteId: note.id, syncStatus: 'idle', syncCurrentStatus: 'idle' })
       return note
     } catch (err) {
       console.error('Failed to create note:', err)
@@ -420,7 +475,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
             ? { ...n, title: nextTitle, content: nextContent, updated_at: new Date().toISOString(), is_dirty: 1 }
             : n
         ),
-        syncStatus: 'idle',
+        syncCurrentStatus: state.selectedNoteId === id ? 'idle' : state.syncCurrentStatus,
       }))
     } catch (err) {
       console.error('Failed to update note:', err)
@@ -435,7 +490,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       set({
         notes,
         selectedNoteId: selectedNoteId === id ? null : selectedNoteId,
-        syncStatus: 'idle',
+        syncCurrentStatus: selectedNoteId === id ? 'idle' : get().syncCurrentStatus,
       })
     } catch (err) {
       console.error('Failed to delete note:', err)
@@ -500,12 +555,18 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         localStorage.removeItem('auth_token')
         localStorage.removeItem('user_id')
         set({
+          notes: [],
+          selectedNoteId: null,
+          activeEditorNoteId: null,
+          activeEditorFlush: null,
           isAuthenticated: false,
           userId: null,
           userEmail: null,
           token: null,
           encryptionKey: null,
           syncStatus: 'reauth-required',
+          syncAllStatus: 'idle',
+          syncCurrentStatus: 'idle',
         })
         return
       }
@@ -556,7 +617,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       localStorage.removeItem('auth_token')
       localStorage.removeItem('user_id')
       
-      set({ isAuthenticated: true, userId, userEmail, token, encryptionKey, syncStatus: 'idle' })
+      set({ isAuthenticated: true, userId, userEmail, token, encryptionKey, syncStatus: 'idle', syncAllStatus: 'idle', syncCurrentStatus: 'idle' })
       
       // Sync after login
       await get().syncToCloud()
@@ -589,7 +650,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       localStorage.removeItem('auth_token')
       localStorage.removeItem('user_id')
       
-      set({ isAuthenticated: true, userId, userEmail, token, encryptionKey, syncStatus: 'idle' })
+      set({ isAuthenticated: true, userId, userEmail, token, encryptionKey, syncStatus: 'idle', syncAllStatus: 'idle', syncCurrentStatus: 'idle' })
       
       // Sync after register
       await get().syncToCloud()
@@ -610,12 +671,16 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     set({
       notes: [],
       selectedNoteId: null,
+      activeEditorNoteId: null,
+      activeEditorFlush: null,
       isAuthenticated: false,
       userId: null,
       userEmail: null,
       token: null,
       encryptionKey: null,
       syncStatus: 'idle',
+      syncAllStatus: 'idle',
+      syncCurrentStatus: 'idle',
     })
     await get().loadNotes()
   },
@@ -625,12 +690,18 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     if (!token || !encryptionKey) {
       await clearAuthForReauth(userId)
       set({
+        notes: [],
+        selectedNoteId: null,
+        activeEditorNoteId: null,
+        activeEditorFlush: null,
         isAuthenticated: false,
         userId: null,
         userEmail: null,
         token: null,
         encryptionKey: null,
         syncStatus: 'reauth-required',
+        syncAllStatus: 'idle',
+        syncCurrentStatus: 'idle',
       })
       throw new Error('请重新登录以恢复加密同步')
     }
@@ -651,12 +722,16 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         set({
           notes: [],
           selectedNoteId: null,
+          activeEditorNoteId: null,
+          activeEditorFlush: null,
           isAuthenticated: false,
           userId: null,
           userEmail: null,
           token: null,
           encryptionKey: null,
           syncStatus: 'reauth-required',
+          syncAllStatus: 'idle',
+          syncCurrentStatus: 'idle',
         })
         throw new Error('当前登录态属于其他后端环境，请重新登录。')
       }
@@ -699,22 +774,92 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     }
   },
 
-  syncToCloud: async () => {
+  syncNoteToCloud: async (noteId) => {
     const { token, encryptionKey, userId } = get()
     if (!token || !encryptionKey) {
       await clearAuthForReauth(userId)
       set({
+        notes: [],
+        selectedNoteId: null,
+        activeEditorNoteId: null,
+        activeEditorFlush: null,
         isAuthenticated: false,
         userId: null,
         userEmail: null,
         token: null,
         encryptionKey: null,
         syncStatus: 'reauth-required',
+        syncAllStatus: 'idle',
+        syncCurrentStatus: 'idle',
       })
       return
     }
 
-    set({ syncStatus: 'syncing' })
+    if (get().activeEditorNoteId === noteId) {
+      await get().flushActiveEditor()
+    }
+
+    const note = get().notes.find((item) => item.id === noteId)
+    if (!note) {
+      return
+    }
+
+    if (!note.is_dirty) {
+      set({ syncCurrentStatus: 'success' })
+      return
+    }
+
+    set({ syncCurrentStatus: 'syncing' })
+
+    try {
+      const pushResult = await pushNoteToCloud(note, token, encryptionKey)
+
+      if (pushResult.status === 'conflict') {
+        if (!pushResult.note) {
+          set({ syncCurrentStatus: 'error' })
+          return
+        }
+
+        const resolution = await resolveSyncConflict(note, pushResult.note, token, encryptionKey)
+        set({ syncCurrentStatus: resolution === 'failed' ? 'error' : 'success' })
+      } else if (pushResult.status === 'error') {
+        set({ syncCurrentStatus: 'error' })
+      } else {
+        await window.api.markNoteSynced(note.id, pushResult.note.syncVersion)
+        set({ syncCurrentStatus: 'success' })
+      }
+
+      await get().loadNotes()
+    } catch (err) {
+      console.error(`❌ Sync current note failed (${noteId}):`, err)
+      set({ syncCurrentStatus: 'error' })
+    }
+  },
+
+  syncToCloud: async () => {
+    const { token, encryptionKey, userId } = get()
+    if (!token || !encryptionKey) {
+      await clearAuthForReauth(userId)
+      set({
+        notes: [],
+        selectedNoteId: null,
+        activeEditorNoteId: null,
+        activeEditorFlush: null,
+        isAuthenticated: false,
+        userId: null,
+        userEmail: null,
+        token: null,
+        encryptionKey: null,
+        syncStatus: 'reauth-required',
+        syncAllStatus: 'idle',
+        syncCurrentStatus: 'idle',
+      })
+      return
+    }
+
+    await get().flushActiveEditor()
+
+    set({ syncAllStatus: 'syncing' })
     
     try {
       // 第一步：从云端拉取最新数据
@@ -773,14 +918,14 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       }
       
       const hasFailures = conflictCount > 0 || errorCount > 0
-      set({ syncStatus: hasFailures ? 'error' : 'success' })
+      set({ syncAllStatus: hasFailures ? 'error' : 'success' })
       console.log(`🎉 Sync completed: ${successCount} pushed, ${conflictCount} conflicts, ${errorCount} failed`)
       
       // 重新加载笔记列表
       await get().loadNotes()
     } catch (err) {
       console.error('❌ Sync failed:', err)
-      set({ syncStatus: 'error' })
+      set({ syncAllStatus: 'error' })
     }
   },
 }))

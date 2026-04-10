@@ -15,26 +15,30 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 18px 44px 56px;
-  overflow: auto;
+  padding: 18px 24px 32px;
+  overflow: hidden;
 }
 
 .editor-body--empty,
 .editor-body--notion-empty {
-  justify-content: center;
+  flex: 1;
+  justify-content: stretch;
 }
 
 .editor-body--notion-empty {
-  align-items: center;
+  align-items: stretch;
 }
 
 .editor-content-wrap {
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  max-width: 1280px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: hidden;
 }
 
 .editor-header--simple {
@@ -44,11 +48,13 @@
   padding-top: 8px;
   padding-bottom: 10px;
   border-bottom: none;
+  flex-shrink: 0;
 }
 
 .editor-header-main {
   flex: 1;
-  max-width: 960px;
+  min-width: 0;
+  max-width: none;
 }
 
 .editor-title-input {
@@ -95,16 +101,49 @@
 
 .editor-alert {
   margin-top: 0;
-  max-width: 960px;
+  max-width: none;
+  flex-shrink: 0;
 }
 
 .editor-surface--simple {
   flex: 1;
-  min-height: 700px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border: none;
   border-radius: 0;
   background: transparent;
   padding: 0;
+}
+
+.editor-surface--simple > .configurable-tiptap-editor,
+.editor-surface--simple .xeditor-frame--fill-height,
+.editor-surface--simple .xeditor-layout,
+.editor-surface--simple .editor-wrapper,
+.editor-surface--simple .xeditor-pane {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.editor-surface--simple .xeditor-pane__header {
+  flex-shrink: 0;
+}
+
+.editor-surface--simple .xeditor-pane__body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-surface--simple .xeditor-pane__body--padded {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .tiptap-toolbar[data-variant=fixed] {
@@ -112,8 +151,8 @@
   top: 8px !important;
   z-index: 10 !important;
   width: 100%;
-  max-width: 1180px;
-  margin: 0 auto 20px !important;
+  max-width: none;
+  margin: 0 0 20px !important;
   padding: 8px 10px !important;
   border-radius: 10px !important;
   background: #ffffff !important;
@@ -151,9 +190,10 @@
 
 .editor-surface--simple .ProseMirror,
 .editor-surface--simple .tiptap {
-  max-width: 960px;
-  margin: 0 auto;
-  min-height: 760px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  min-height: max(100%, 560px);
   font-family: var(--font-sans) !important;
   font-size: 17px !important;
   line-height: 1.9 !important;
@@ -176,8 +216,12 @@
 }
 
 .empty-stage {
-  margin: 0 auto;
-  text-align: center;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin: 0;
+  display: flex;
+  align-self: stretch;
 }
 
 .empty-stage--minimal {
@@ -185,8 +229,15 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  max-width: 520px;
-  padding: 12px 10px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  padding: 32px 24px;
+  text-align: center;
+  border: 1px solid #f1eeea;
+  border-radius: 28px;
+  background: linear-gradient(180deg, #fffdfa 0%, #fffaf4 100%);
 }
 
 .empty-stage__title {
@@ -207,7 +258,7 @@
 
 .empty-stage--minimal .ant-btn {
   height: 42px;
-  margin-top: 4px;
+  margin-top: 12px;
   padding-inline: 18px;
   border-radius: 10px;
 }
@@ -244,5 +295,11 @@
 
   .empty-stage__title {
     font-size: 34px !important;
+  }
+
+  .empty-stage--minimal {
+    min-height: 0;
+    padding: 24px 18px;
+    border-radius: 22px;
   }
 }

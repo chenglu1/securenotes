@@ -12,8 +12,8 @@ importers:
         specifier: ^6.1.1
         version: 6.1.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@chenglu1/xeditor-editor':
-        specifier: ^0.0.8
-        version: 0.0.8(@floating-ui/dom@1.7.6)(@tiptap/extension-text-style@3.20.4(@tiptap/core@3.20.4(@tiptap/pm@3.20.4)))(@tiptap/extensions@3.20.4(@tiptap/core@3.20.4(@tiptap/pm@3.20.4))(@tiptap/pm@3.20.4))(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.0.9
+        version: 0.0.9(@floating-ui/dom@1.7.6)(@tiptap/extension-text-style@3.20.4(@tiptap/core@3.20.4(@tiptap/pm@3.20.4)))(@tiptap/extensions@3.20.4(@tiptap/core@3.20.4(@tiptap/pm@3.20.4))(@tiptap/pm@3.20.4))(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       antd:
         specifier: ^6.3.5
         version: 6.3.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -210,8 +210,8 @@ packages:
     resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
     engines: {node: '>=6.9.0'}
 
-  '@chenglu1/xeditor-editor@0.0.8':
-    resolution: {integrity: sha512-JEnb2sTmBVErTKKHCuD0GG/nbGKP6lJZrozj2TGjQ2SU3OPvaY3w9PvTG2TIEcuu97zxfMUHY+3zcIwwqZktMQ==}
+  '@chenglu1/xeditor-editor@0.0.9':
+    resolution: {integrity: sha512-O3AG1zOQY0Yocx2eUaCvA8tRwT9S/fVy0IOa1dfRSps2cuWXat3YaarZArVDgk2ICJX/0apWkRnFSLletDlRfg==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       i18next: '>=23.0.0'
@@ -3284,7 +3284,7 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
 
-  '@chenglu1/xeditor-editor@0.0.8(@floating-ui/dom@1.7.6)(@tiptap/extension-text-style@3.20.4(@tiptap/core@3.20.4(@tiptap/pm@3.20.4)))(@tiptap/extensions@3.20.4(@tiptap/core@3.20.4(@tiptap/pm@3.20.4))(@tiptap/pm@3.20.4))(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@chenglu1/xeditor-editor@0.0.9(@floating-ui/dom@1.7.6)(@tiptap/extension-text-style@3.20.4(@tiptap/core@3.20.4(@tiptap/pm@3.20.4)))(@tiptap/extensions@3.20.4(@tiptap/core@3.20.4(@tiptap/pm@3.20.4))(@tiptap/pm@3.20.4))(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@floating-ui/react': 0.26.28(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-dropdown-menu': 2.1.16(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

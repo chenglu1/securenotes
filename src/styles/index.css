@@ -42,6 +42,13 @@ body,
   overflow: hidden;
 }
 
+#root > .ant-app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 body {
   font-family: var(--font-sans);
   color: var(--ink-strong);
@@ -108,7 +115,11 @@ body::before {
 
 .app-frame {
   position: relative;
+  flex: 1;
   height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   padding: 12px;
 }
 
@@ -132,7 +143,9 @@ body::before {
 .workspace-shell {
   position: relative;
   z-index: 1;
+  flex: 1;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid #ece9e4;
   border-radius: 14px;
@@ -145,13 +158,16 @@ body::before {
   z-index: 1;
   height: 100%;
   gap: 0;
+  overflow: hidden;
   background: transparent !important;
 }
 
 .shell-sider.ant-layout-sider,
 .shell-content.ant-layout-content {
   background: transparent !important;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .shell-sider.ant-layout-sider {
@@ -160,6 +176,8 @@ body::before {
 }
 
 .shell-content.ant-layout-content {
+  display: flex;
+  min-width: 0;
   background: #ffffff !important;
 }
 
@@ -177,11 +195,14 @@ body::before {
 .sidebar-panel {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .editor-panel {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   overflow: hidden;
 }
 

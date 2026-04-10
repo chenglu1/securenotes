@@ -19,9 +19,9 @@ export class SyncService {
     });
 
     if (note) {
-      // Update existing — the client's version must be >= server's
-      if (noteData.syncVersion < note.syncVersion) {
-        // Conflict: client is behind. Return server version for merge.
+      // Update existing — the client must be based on the exact current server version.
+      if (noteData.syncVersion !== note.syncVersion) {
+        // Conflict: client and server are out of sync. Return server version for merge.
         return { status: 'conflict', note };
       }
       note.encryptedTitle = noteData.encryptedTitle;
