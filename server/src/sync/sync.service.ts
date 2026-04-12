@@ -1,7 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm';
+import { Repository, MoreThan, IsNull } from 'typeorm';
 import { Note } from '../entities/note.entity';
+
+export interface NoteSummaryDto {
+  id: string;
+  encryptedTitle: string;
+  syncVersion: number;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+}
 
 @Injectable()
 export class SyncService {
@@ -68,13 +77,43 @@ export class SyncService {
   }
 
   /**
-   * Get all notes for a user
+   * Get note summaries for list views.
    */
-  async listNotes(userId: string): Promise<Note[]> {
+  async listNoteSummaries(userId: string): Promise<NoteSummaryDto[]> {
     return this.noteRepo.find({
-      where: { userId },
+      where: {
+        userId,
+        deletedAt: IsNull(),
+      },
+      select: {
+        id: true,
+        encryptedTitle: true,
+        syncVersion: true,
+        createdAt: true,
+        updatedAt: true,
+        deletedAt: true,
+      },
       order: { updatedAt: 'DESC' },
     });
+  }
+
+  /**
+   * Get a note detail by id.
+   */
+  async getNoteDetail(userId: string, noteId: string): Promise<Note> {
+    const note = await this.noteRepo.findOne({
+      where: {
+        id: noteId,
+        userId,
+        deletedAt: IsNull(),
+      },
+    });
+
+    if (!note) {
+      throw new NotFoundException('笔记不存在');
+    }
+
+    return note;
   }
 }
 

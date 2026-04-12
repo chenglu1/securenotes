@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
   Param,
   Put,
   Query,
@@ -57,6 +58,7 @@ export class SyncController {
   }
 
   @Get('changes')
+  @HttpCode(200)
   async listChanges(
     @Query('sinceVersion') sinceVersion: string,
     @Headers('authorization') auth?: string,
@@ -74,9 +76,10 @@ export class SyncController {
   }
 
   @Get()
+  @HttpCode(200)
   async listNotes(@Headers('authorization') auth?: string) {
     const userId = await this.getUserId(auth);
-    const notes = await this.syncService.listNotes(userId);
+    const notes = await this.syncService.listNoteSummaries(userId);
     return ok(
       {
         items: notes,
@@ -84,5 +87,16 @@ export class SyncController {
       },
       '获取笔记列表成功',
     );
+  }
+
+  @Get(':id')
+  @HttpCode(200)
+  async getNoteDetail(
+    @Param('id') id: string,
+    @Headers('authorization') auth?: string,
+  ) {
+    const userId = await this.getUserId(auth);
+    const note = await this.syncService.getNoteDetail(userId, id);
+    return ok(note, '获取笔记详情成功');
   }
 }

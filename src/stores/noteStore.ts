@@ -66,9 +66,9 @@ interface NoteConflictResponse {
   note?: CloudNote
 }
 
-interface CloudNoteListResponse {
+interface CloudNoteChangesResponse {
   items: CloudNote[]
-  total: number
+  latestVersion: number
 }
 
 type EditorFlushHandler = () => Promise<void>
@@ -119,8 +119,8 @@ function buildConflictCopyTitle(title: string): string {
   return baseTitle.endsWith('（冲突副本）') ? baseTitle : `${baseTitle}（冲突副本）`
 }
 
-async function fetchCloudNotesResponse(token: string): Promise<Response> {
-  return fetch(apiUrl('/notes'), {
+async function fetchCloudNoteChangesResponse(token: string): Promise<Response> {
+  return fetch(apiUrl('/notes/changes?sinceVersion=0'), {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -176,8 +176,8 @@ function decodeJwtPayload(token: string): { email?: unknown; authMethod?: unknow
 
 async function ensureRemoteSyncKey(token: string, encryptionKey: string): Promise<void> {
   const keyVerifier = await createKeyVerifier(encryptionKey)
-  const response = await fetch(apiUrl('/auth/sync-key'), {
-    method: 'POST',
+  const response = await fetch(apiUrl('/users/me/sync-key-verifier'), {
+    method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
@@ -767,7 +767,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   login: async (email, password) => {
     try {
-      const response = await fetch(apiUrl('/auth/login'), {
+      const response = await fetch(apiUrl('/sessions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -796,7 +796,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   register: async (email, password) => {
     try {
-      const response = await fetch(apiUrl('/auth/register'), {
+      const response = await fetch(apiUrl('/users'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -942,7 +942,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       console.log('⬇️ Pulling notes from cloud...')
       
       // 获取云端所有笔记
-      const response = await fetchCloudNotesResponse(token)
+      const response = await fetchCloudNoteChangesResponse(token)
 
       if (response.status === 401 || response.status === 403) {
         await clearAuthForReauth(userId)
@@ -965,7 +965,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         throw new Error('当前登录态属于其他后端环境，请重新登录。')
       }
 
-      const payload = await readJson<ApiResponse<CloudNoteListResponse>>(response)
+      const payload = await readJson<ApiResponse<CloudNoteChangesResponse>>(response)
       const cloudNotes = unwrapApiResponse(payload)?.items ?? null
 
       if (!response.ok || !Array.isArray(cloudNotes)) {
