@@ -237,6 +237,10 @@
 }
 
 .note-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
   width: 100%;
   border: 1px solid transparent;
   border-radius: 12px;
@@ -260,9 +264,25 @@
   transform: none;
 }
 
+.note-list-item.is-editing {
+  cursor: default;
+}
+
 .note-list-item__head {
   align-items: flex-start;
   gap: 8px;
+  transition: padding-right 120ms ease;
+}
+
+.note-list-item:hover .note-list-item__head,
+.note-list-item.is-menu-open .note-list-item__head,
+.note-list-item.is-editing .note-list-item__head {
+  padding-right: 34px;
+}
+
+.note-list-item__main {
+  min-width: 0;
+  flex: 1;
 }
 
 .note-title,
@@ -272,11 +292,103 @@
   font-size: 14px;
 }
 
-.note-preview {
-  margin: 5px 0 7px !important;
-  color: #8b867f !important;
+.note-title-input.ant-input {
+  padding: 4px 8px;
+  border-color: #d6d3d1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #37352f;
+  font-size: 13px;
+}
+
+.note-title-input.ant-input:focus,
+.note-title-input.ant-input-focused {
+  border-color: #a8a29c;
+  box-shadow: 0 0 0 2px rgba(168, 162, 156, 0.18);
+}
+
+.note-list-item__actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+}
+
+.note-list-item__more.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  color: #8b867f;
+  opacity: 0;
+  transform: translateY(-1px) scale(0.96);
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.note-list-item:hover .note-list-item__more.ant-btn,
+.note-list-item.is-active .note-list-item__more.ant-btn,
+.note-list-item.is-menu-open .note-list-item__more.ant-btn,
+.note-list-item.is-editing .note-list-item__more.ant-btn {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.note-list-item__more.ant-btn:hover,
+.note-list-item__more.ant-btn:focus {
+  color: #37352f;
+  background: rgba(255, 255, 255, 0.85) !important;
+}
+
+.note-list-item__menu {
+  position: absolute;
+  top: 32px;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 132px;
+  padding: 6px;
+  border: 1px solid #e9e5de;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 24px rgba(55, 53, 47, 0.12);
+  backdrop-filter: blur(10px);
+}
+
+.note-list-item__menu-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #4b4742;
   font-size: 12px;
-  line-height: 1.55;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.note-list-item__menu-button:hover,
+.note-list-item__menu-button:focus {
+  background: #f5f3ef;
+}
+
+.note-list-item__menu-button--danger {
+  color: #c2410c;
+}
+
+.note-list-item__menu-button--danger:hover,
+.note-list-item__menu-button--danger:focus {
+  background: #fff1f2;
 }
 
 .note-list-item__foot {
@@ -284,6 +396,20 @@
   gap: 8px;
   color: #9b978f;
   font-size: 11px;
+}
+
+.note-list-item__edit-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: -2px;
+}
+
+.note-list-item__edit-button.ant-btn {
+  height: 26px;
+  padding-inline: 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .note-status {
@@ -304,6 +430,12 @@
 .note-status--dirty {
   background: #fef3c7;
   color: #b45309;
+}
+
+.note-status--inline {
+  min-width: 0;
+  padding: 2px 7px;
+  font-size: 10px;
 }
 
 .sidebar-footer--simple {

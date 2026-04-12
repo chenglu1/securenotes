@@ -107,22 +107,29 @@ export class SyncService {
   /**
    * Get note summaries for list views.
    */
-  async listNoteSummaries(userId: string): Promise<NoteSummaryDto[]> {
-    return this.noteRepo.find({
-      where: {
-        userId,
-        deletedAt: IsNull(),
-      },
-      select: {
-        id: true,
-        encryptedTitle: true,
-        syncVersion: true,
-        createdAt: true,
-        updatedAt: true,
-        deletedAt: true,
-      },
-      order: { updatedAt: 'DESC' },
-    });
+  async listNoteSummaries(userId: string, query?: string): Promise<NoteSummaryDto[]> {
+    const normalizedQuery = query?.trim();
+    const queryBuilder = this.noteRepo
+      .createQueryBuilder('note')
+      .select([
+        'note.id',
+        'note.encryptedTitle',
+        'note.syncVersion',
+        'note.createdAt',
+        'note.updatedAt',
+        'note.deletedAt',
+      ])
+      .where('note.userId = :userId', { userId })
+      .andWhere('note.deletedAt IS NULL')
+      .orderBy('note.updatedAt', 'DESC');
+
+    if (normalizedQuery) {
+      queryBuilder.andWhere('note.encryptedTitle ILIKE :query', {
+        query: `%${normalizedQuery}%`,
+      });
+    }
+
+    return queryBuilder.getMany();
   }
 
   /**

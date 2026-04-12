@@ -18,7 +18,6 @@ export interface Note {
 export interface NoteSummary {
   id: string
   title: string
-  preview: string
   created_at: string
   updated_at: string
   deleted_at: string | null

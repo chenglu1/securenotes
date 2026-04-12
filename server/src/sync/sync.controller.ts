@@ -80,9 +80,12 @@ export class SyncController {
 
   @Get()
   @HttpCode(200)
-  async listNotes(@Headers('authorization') auth?: string) {
+  async listNotes(
+    @Query('query') query: string | undefined,
+    @Headers('authorization') auth?: string,
+  ) {
     const userId = await this.getUserId(auth);
-    const notes = await this.syncService.listNoteSummaries(userId);
+    const notes = await this.syncService.listNoteSummaries(userId, query);
     return ok(
       {
         items: notes,

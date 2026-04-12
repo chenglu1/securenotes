@@ -1,5 +1,8 @@
 import {
   CloudSyncOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  EllipsisOutlined,
   LoginOutlined,
   LogoutOutlined,
   PlusOutlined,
@@ -8,7 +11,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Avatar, Button, Empty, Input, Typography } from 'antd'
-import { useCallback, useDeferredValue, useEffect, useRef } from 'react'
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react'
 import { useNoteStore } from '../../stores/noteStore'
 
 interface SidebarProps {
@@ -32,13 +35,6 @@ function formatRelativeTime(dateStr: string) {
     month: '2-digit',
     day: '2-digit',
   }).format(date)
-}
-
-function getPreview(content: string) {
-  if (!content) return '空白页，适合开始新的想法。'
-
-  const text = content.replace(/<[^>]*>/g, '').replace(/[{}[\]"]/g, '').trim()
-  return text.substring(0, 96) || '空白页，适合开始新的想法。'
 }
 
 function getWorkspaceName(userEmail: string | null, userId: string | null) {
@@ -75,6 +71,8 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
   const setSearchQuery = useNoteStore((s) => s.setSearchQuery)
   const selectNote = useNoteStore((s) => s.selectNote)
   const createNote = useNoteStore((s) => s.createNote)
+  const updateNote = useNoteStore((s) => s.updateNote)
+  const deleteNote = useNoteStore((s) => s.deleteNote)
   const isLoading = useNoteStore((s) => s.isLoading)
   const isAuthenticated = useNoteStore((s) => s.isAuthenticated)
   const userId = useNoteStore((s) => s.userId)
@@ -86,10 +84,55 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
   const loadNotes = useNoteStore((s) => s.loadNotes)
   const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase())
   const hasHydratedSearch = useRef(false)
+  const actionMenuRef = useRef<HTMLDivElement | null>(null)
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+  const [openMenuNoteId, setOpenMenuNoteId] = useState<string | null>(null)
 
   const handleCreateNote = useCallback(async () => {
     await createNote()
   }, [createNote])
+
+  const startTitleEdit = useCallback((noteId: string, title: string) => {
+    setOpenMenuNoteId(null)
+    setEditingNoteId(noteId)
+    setEditingTitle(title)
+  }, [])
+
+  const cancelTitleEdit = useCallback(() => {
+    setEditingNoteId(null)
+    setEditingTitle('')
+  }, [])
+
+  const submitTitleEdit = useCallback(async (noteId: string) => {
+    const nextTitle = editingTitle.trim().length === 0 ? '' : editingTitle
+    setEditingNoteId(null)
+    setEditingTitle('')
+    await updateNote(noteId, { title: nextTitle })
+  }, [editingTitle, updateNote])
+
+  const handleDeleteNote = useCallback(async (noteId: string) => {
+    setOpenMenuNoteId(null)
+    if (!confirm('确定要删除这篇笔记吗？')) {
+      return
+    }
+
+    await deleteNote(noteId)
+  }, [deleteNote])
+
+  const handleNoteCardKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>, noteId: string) => {
+    if (editingNoteId === noteId) {
+      return
+    }
+
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return
+    }
+
+    event.preventDefault()
+    setOpenMenuNoteId(null)
+    void selectNote(noteId)
+  }, [editingNoteId, selectNote])
 
   useEffect(() => {
     if (!hasHydratedSearch.current) {
@@ -99,6 +142,32 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
 
     void loadNotes()
   }, [deferredSearchQuery, loadNotes])
+
+  useEffect(() => {
+    if (editingNoteId && !notes.some((note) => note.id === editingNoteId)) {
+      cancelTitleEdit()
+    }
+  }, [cancelTitleEdit, editingNoteId, notes])
+
+  useEffect(() => {
+    if (!openMenuNoteId) {
+      return
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      if (!target || actionMenuRef.current?.contains(target)) {
+        return
+      }
+
+      setOpenMenuNoteId(null)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+    }
+  }, [openMenuNoteId])
 
   const visibleNotes = notes
 
@@ -204,7 +273,7 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
         size="large"
         value={searchQuery}
         prefix={<SearchOutlined />}
-        placeholder="搜索标题或内容..."
+        placeholder="搜索标题..."
         className="sidebar-search"
         allowClear
         onChange={(event) => setSearchQuery(event.target.value)}
@@ -252,35 +321,123 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
           <div className="notes-empty-state notes-empty-state--minimal">
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={deferredSearchQuery ? '没有找到匹配内容。' : '还没有笔记。'}
+              description={deferredSearchQuery ? '没有找到匹配标题。' : '还没有笔记。'}
             />
           </div>
         ) : (
           visibleNotes.map((note) => (
-            <button
+            <div
               key={note.id}
-              type="button"
-              className={`note-list-item ${selectedNoteId === note.id ? 'is-active' : ''}`}
-              onClick={() => void selectNote(note.id)}
+              role="button"
+              tabIndex={editingNoteId === note.id ? -1 : 0}
+              className={`note-list-item ${selectedNoteId === note.id ? 'is-active' : ''} ${openMenuNoteId === note.id ? 'is-menu-open' : ''} ${editingNoteId === note.id ? 'is-editing' : ''}`}
+              onClick={() => {
+                if (editingNoteId === note.id) {
+                  return
+                }
+
+                setOpenMenuNoteId(null)
+                void selectNote(note.id)
+              }}
+              onKeyDown={(event) => handleNoteCardKeyDown(event, note.id)}
             >
               <div className="note-list-item__head">
-                <Typography.Text className="note-title" strong ellipsis>
-                  {note.title || '无标题'}
-                </Typography.Text>
-                <span className={`note-status ${note.is_dirty ? 'note-status--dirty' : ''}`}>
-                  {getNoteStatusLabel(note, isAuthenticated)}
-                </span>
+                <div className="note-list-item__main">
+                  {editingNoteId === note.id ? (
+                    <Input
+                      size="small"
+                      autoFocus
+                      value={editingTitle}
+                      placeholder="无标题"
+                      className="note-title-input"
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={(event) => setEditingTitle(event.target.value)}
+                      onPressEnter={() => void submitTitleEdit(note.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          cancelTitleEdit()
+                        }
+                      }}
+                    />
+                  ) : (
+                    <Typography.Text className="note-title" strong ellipsis>
+                      {note.title || '无标题'}
+                    </Typography.Text>
+                  )}
+                </div>
               </div>
-
-              <Typography.Paragraph className="note-preview" ellipsis={{ rows: 2 }}>
-                {getPreview(note.preview)}
-              </Typography.Paragraph>
 
               <div className="note-list-item__foot">
                 <span>{formatRelativeTime(note.updated_at)}</span>
+                <span className={`note-status note-status--inline ${note.is_dirty ? 'note-status--dirty' : ''}`}>
+                  {getNoteStatusLabel(note, isAuthenticated)}
+                </span>
                 {note.deleted_at ? <span>已删除</span> : null}
               </div>
-            </button>
+
+              {editingNoteId === note.id ? (
+                <div className="note-list-item__edit-actions" onClick={(event) => event.stopPropagation()}>
+                  <Button
+                    type="primary"
+                    size="small"
+                    className="note-list-item__edit-button"
+                    onClick={() => void submitTitleEdit(note.id)}
+                  >
+                    保存
+                  </Button>
+                  <Button
+                    size="small"
+                    className="note-list-item__edit-button"
+                    onClick={cancelTitleEdit}
+                  >
+                    取消
+                  </Button>
+                </div>
+              ) : null}
+
+              <div
+                ref={openMenuNoteId === note.id ? actionMenuRef : null}
+                className="note-list-item__actions"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  className="note-list-item__more"
+                  icon={<EllipsisOutlined />}
+                  aria-label="更多操作"
+                  aria-expanded={openMenuNoteId === note.id}
+                  onClick={() => {
+                    setOpenMenuNoteId((current) => current === note.id ? null : note.id)
+                  }}
+                />
+
+                {openMenuNoteId === note.id ? (
+                  <div className="note-list-item__menu">
+                    <button
+                      type="button"
+                      className="note-list-item__menu-button"
+                      onClick={() => startTitleEdit(note.id, note.title)}
+                    >
+                      <EditOutlined />
+                      <span>修改标题</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="note-list-item__menu-button note-list-item__menu-button--danger"
+                      onClick={() => void handleDeleteNote(note.id)}
+                    >
+                      <DeleteOutlined />
+                      <span>删除笔记</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           ))
         )}
       </div>

@@ -20,7 +20,6 @@ export interface Note {
 export interface NoteSummary {
   id: string
   title: string
-  preview: string
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -261,15 +260,10 @@ function hasMeaningfulLocalContent(note: Note): boolean {
   return note.title.trim().length > 0 || note.content.trim().length > 0
 }
 
-function buildNotePreview(content: string): string {
-  return content.slice(0, 240)
-}
-
 function toNoteSummary(note: Note): NoteSummary {
   return {
     id: note.id,
     title: note.title,
-    preview: buildNotePreview(note.content),
     created_at: note.created_at,
     updated_at: note.updated_at,
     deleted_at: note.deleted_at,

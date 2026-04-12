@@ -15,14 +15,14 @@ export class NotesRepository {
     const db = getDatabase()
     const normalizedQuery = query?.trim()
     const summarySql = normalizedQuery
-      ? `SELECT id, title, SUBSTR(content, 1, 240) AS preview, created_at, updated_at, deleted_at, sync_version, is_dirty
+      ? `SELECT id, title, created_at, updated_at, deleted_at, sync_version, is_dirty
          FROM notes
          WHERE deleted_at IS NULL
            AND owner_user_id = ?
-           AND (title LIKE ? OR content LIKE ?)
+           AND title LIKE ?
          ORDER BY updated_at DESC
          LIMIT 50`
-      : `SELECT id, title, SUBSTR(content, 1, 240) AS preview, created_at, updated_at, deleted_at, sync_version, is_dirty
+      : `SELECT id, title, created_at, updated_at, deleted_at, sync_version, is_dirty
          FROM notes
          WHERE deleted_at IS NULL AND owner_user_id = ?
          ORDER BY updated_at DESC`
@@ -30,7 +30,7 @@ export class NotesRepository {
     const stmt = db.prepare(summarySql)
     if (normalizedQuery) {
       const pattern = `%${normalizedQuery}%`
-      stmt.bind([scope, pattern, pattern])
+      stmt.bind([scope, pattern])
     } else {
       stmt.bind([scope])
     }

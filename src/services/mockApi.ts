@@ -21,7 +21,6 @@ interface Note {
 interface NoteSummary {
   id: string
   title: string
-  preview: string
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -61,10 +60,6 @@ function getCurrentScope() {
   return authSession?.userId ?? LOCAL_NOTE_SCOPE
 }
 
-function buildPreview(content: string) {
-  return content.slice(0, 240)
-}
-
 export const mockApi = {
   getNoteSummaries: async (query?: string): Promise<NoteSummary[]> => {
     const normalizedQuery = query?.trim().toLowerCase()
@@ -78,12 +73,11 @@ export const mockApi = {
           return true
         }
 
-        return `${note.title} ${note.content}`.toLowerCase().includes(normalizedQuery)
+        return note.title.toLowerCase().includes(normalizedQuery)
       })
       .map((note) => ({
         id: note.id,
         title: note.title,
-        preview: buildPreview(note.content),
         created_at: note.created_at,
         updated_at: note.updated_at,
         deleted_at: note.deleted_at,

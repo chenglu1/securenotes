@@ -117,7 +117,7 @@ Render 运行时需要的关键环境变量：
 - `POST /api/auth/sync-key`：同步密钥校验/初始化
 - `GET /api/auth/google/start`：发起 Google OAuth
 - `GET /api/auth/google/callback`：接收 Google OAuth 回调
-- `GET /api/notes`：获取笔记摘要列表，不返回完整正文
+- `GET /api/notes?query=...`：获取按标题过滤的笔记摘要列表，不返回完整正文
 - `GET /api/notes/:id`：获取单篇笔记详情
 - `PUT /api/notes/:id`：创建或更新单篇笔记
 - `GET /api/notes/changes?sinceVersion=...`：同步增量或首轮全量拉取
@@ -127,7 +127,7 @@ Render 运行时需要的关键环境变量：
 
 说明：
 
-- 左侧列表在本地仍会保留 `preview` 摘要字段，用于卡片预览，但不会持有完整正文详情。
+- 左侧列表摘要现在只保留标题相关元数据，不再携带 `preview` 或正文截断内容。
 - 完整正文只在详情读取或同步变更接口中返回。
 
 ## Google 登录说明
