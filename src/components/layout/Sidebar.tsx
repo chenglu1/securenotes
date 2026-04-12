@@ -10,7 +10,7 @@ import {
   SyncOutlined,
   UserOutlined,
 } from '@ant-design/icons'
-import { Avatar, Button, Empty, Input, Typography } from 'antd'
+import { Avatar, Button, Empty, Input, Popconfirm, Popover, Typography } from 'antd'
 import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react'
 import { useNoteStore } from '../../stores/noteStore'
 
@@ -64,6 +64,10 @@ function getNoteStatusLabel(note: { is_dirty: number; sync_version: number }, is
   return '已同步'
 }
 
+function shouldShowNoteStatus(note: { is_dirty: number; sync_version: number }, isAuthenticated: boolean) {
+  return note.is_dirty || !isAuthenticated || note.sync_version === 0
+}
+
 export function Sidebar({ onShowAuth }: SidebarProps) {
   const notes = useNoteStore((s) => s.notes)
   const selectedNoteId = useNoteStore((s) => s.selectedNoteId)
@@ -84,7 +88,6 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
   const loadNotes = useNoteStore((s) => s.loadNotes)
   const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase())
   const hasHydratedSearch = useRef(false)
-  const actionMenuRef = useRef<HTMLDivElement | null>(null)
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [openMenuNoteId, setOpenMenuNoteId] = useState<string | null>(null)
@@ -149,26 +152,6 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
     }
   }, [cancelTitleEdit, editingNoteId, notes])
 
-  useEffect(() => {
-    if (!openMenuNoteId) {
-      return
-    }
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node | null
-      if (!target || actionMenuRef.current?.contains(target)) {
-        return
-      }
-
-      setOpenMenuNoteId(null)
-    }
-
-    document.addEventListener('mousedown', handlePointerDown)
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
-    }
-  }, [openMenuNoteId])
-
   const visibleNotes = notes
 
   const dirtyCount = notes.filter((note) => note.is_dirty).length
@@ -198,12 +181,14 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
       ? '需重新登录'
       : '本地模式'
   const footerText = isAuthenticated
-    ? dirtyCount > 0
-      ? `${dirtyCount} 条改动待同步`
-      : '云端与本地已同步'
+    ? syncAllStatus === 'syncing'
+      ? '正在同步更改'
+      : dirtyCount > 0
+        ? `${dirtyCount} 条待同步`
+        : '全部已同步'
     : isReauthRequired
-      ? '请重新登录恢复同步'
-      : '当前仅本地保存'
+      ? '需要重新登录'
+      : '仅本地保存'
   const metaText = deferredSearchQuery
     ? `${visibleNotes.length} 条结果`
     : dirtyCount > 0
@@ -214,23 +199,36 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
   const accountHint = isAuthenticated
     ? userEmail ?? `账户 ${userId?.slice(0, 8)}...`
     : '当前为本地访客空间'
-  const workspaceMeta = isAuthenticated
-    ? '仅当前账号可见，本地优先并自动同步。'
-    : '本地优先，登录后再同步到你的云端空间。'
-  const footerHint = isAuthenticated
-    ? '当前列表只显示这个账号下的笔记'
-    : isReauthRequired
-      ? '重新登录后恢复加密同步'
-      : '登录后可在多端访问同一账号内容'
 
   return (
     <aside className="sidebar-panel">
       <div className="sidebar-identity-card">
         <div className="sidebar-identity-card__head">
-          <Typography.Text className="workspace-switcher__eyebrow">Secure Workspace</Typography.Text>
-          <span className={`sidebar-sync-badge sidebar-sync-badge--${syncTone}`}>
-            {syncLabel}
-          </span>
+          <div className="sidebar-identity-card__toolbar">
+            <span className={`sidebar-sync-badge sidebar-sync-badge--${syncTone}`}>
+              {syncLabel}
+            </span>
+
+            {isAuthenticated ? (
+              <Popconfirm
+                placement="bottomRight"
+                title="确认退出当前账号？"
+                description="本地笔记会保留，云同步将暂停。"
+                okText="退出"
+                cancelText="取消"
+                onConfirm={() => logout()}
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<LogoutOutlined />}
+                  className="sidebar-identity-card__action"
+                >
+                  退出
+                </Button>
+              </Popconfirm>
+            ) : null}
+          </div>
         </div>
 
         <div className="sidebar-identity-card__body">
@@ -248,24 +246,6 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
             </Typography.Title>
             <Typography.Text className="workspace-switcher__meta">{accountHint}</Typography.Text>
           </div>
-        </div>
-
-        <div className="sidebar-identity-card__foot">
-          <Typography.Paragraph className="sidebar-identity-card__description">
-            {workspaceMeta}
-          </Typography.Paragraph>
-
-          {isAuthenticated ? (
-            <Button
-              type="text"
-              size="small"
-              icon={<LogoutOutlined />}
-              className="sidebar-identity-card__action"
-              onClick={() => void logout()}
-            >
-              退出
-            </Button>
-          ) : null}
         </div>
       </div>
 
@@ -372,9 +352,11 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
 
               <div className="note-list-item__foot">
                 <span>{formatRelativeTime(note.updated_at)}</span>
-                <span className={`note-status note-status--inline ${note.is_dirty ? 'note-status--dirty' : ''}`}>
-                  {getNoteStatusLabel(note, isAuthenticated)}
-                </span>
+                {shouldShowNoteStatus(note, isAuthenticated) ? (
+                  <span className={`note-status note-status--inline ${note.is_dirty ? 'note-status--dirty' : ''}`}>
+                    {getNoteStatusLabel(note, isAuthenticated)}
+                  </span>
+                ) : null}
                 {note.deleted_at ? <span>已删除</span> : null}
               </div>
 
@@ -398,24 +380,13 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
                 </div>
               ) : null}
 
-              <div
-                ref={openMenuNoteId === note.id ? actionMenuRef : null}
-                className="note-list-item__actions"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <Button
-                  type="text"
-                  size="small"
-                  className="note-list-item__more"
-                  icon={<EllipsisOutlined />}
-                  aria-label="更多操作"
-                  aria-expanded={openMenuNoteId === note.id}
-                  onClick={() => {
-                    setOpenMenuNoteId((current) => current === note.id ? null : note.id)
-                  }}
-                />
-
-                {openMenuNoteId === note.id ? (
+              <Popover
+                trigger="click"
+                placement="bottomRight"
+                overlayClassName="note-actions-popover"
+                open={openMenuNoteId === note.id}
+                onOpenChange={(open) => setOpenMenuNoteId(open ? note.id : null)}
+                content={
                   <div className="note-list-item__menu">
                     <button
                       type="button"
@@ -435,8 +406,23 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
                       <span>删除笔记</span>
                     </button>
                   </div>
-                ) : null}
-              </div>
+                }
+              >
+                <div className="note-list-item__actions" onClick={(event) => event.stopPropagation()}>
+                  <Button
+                    type="text"
+                    size="small"
+                    className="note-list-item__more"
+                    icon={<EllipsisOutlined />}
+                    aria-label="更多操作"
+                    aria-expanded={openMenuNoteId === note.id}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setOpenMenuNoteId((current) => current === note.id ? null : note.id)
+                    }}
+                  />
+                </div>
+              </Popover>
             </div>
           ))
         )}
@@ -445,7 +431,6 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
       <div className="sidebar-footer sidebar-footer--simple">
         <div className="sidebar-footer__meta">
           <Typography.Text className="sidebar-footer__status">{footerText}</Typography.Text>
-          <Typography.Text className="sidebar-footer__hint">{footerHint}</Typography.Text>
         </div>
       </div>
 

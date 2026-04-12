@@ -147,10 +147,10 @@ body::before {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid #ece9e4;
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.035);
+  border: 1px solid #ebe6df;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fffdfa 0%, #ffffff 100%);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.055);
 }
 
 .shell-layout {
@@ -172,13 +172,13 @@ body::before {
 
 .shell-sider.ant-layout-sider {
   border-right: 1px solid #f1efeb;
-  background: #fbfbfa !important;
+  background: linear-gradient(180deg, #fcfbf8 0%, #f8f6f2 100%) !important;
 }
 
 .shell-content.ant-layout-content {
   display: flex;
   min-width: 0;
-  background: #ffffff !important;
+  background: linear-gradient(180deg, #fffdf9 0%, #ffffff 30%) !important;
 }
 
 .sidebar-panel,
