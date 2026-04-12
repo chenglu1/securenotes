@@ -62,7 +62,7 @@ npm run dev
 
 1. 在客户端注册或登录账号
 2. 新建一条笔记
-3. 点击左下角“云同步”
+3. 点击左侧的“同步全部”
 4. 在 Neon 控制台检查 `notes` 表是否出现新记录
 
 ## 生产打包
@@ -95,13 +95,40 @@ Render 运行时需要的关键环境变量：
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_OAUTH_REDIRECT_URI=https://<your-server-domain>/api/auth/google/callback`
 - `NODE_ENV=production`
-- `DB_SYNCHRONIZE=true`
+- `DB_SYNCHRONIZE=false`
 
 后端健康检查地址：
 
 ```text
 /api/health
 ```
+
+## 当前接口边界
+
+当前后端接口按“高收益、低副作用”原则做了职责拆分。
+
+- 认证接口保留在 `/api/auth` 下，避免 Google OAuth 外部回调配置频繁变更。
+- 笔记接口按职责拆分为列表、详情和同步变更三类。
+
+当前主要接口如下：
+
+- `POST /api/auth/register`：邮箱注册
+- `POST /api/auth/login`：邮箱登录
+- `POST /api/auth/sync-key`：同步密钥校验/初始化
+- `GET /api/auth/google/start`：发起 Google OAuth
+- `GET /api/auth/google/callback`：接收 Google OAuth 回调
+- `GET /api/notes`：获取笔记摘要列表，不返回完整正文
+- `GET /api/notes/:id`：获取单篇笔记详情
+- `PUT /api/notes/:id`：创建或更新单篇笔记
+- `GET /api/notes/changes?sinceVersion=...`：同步增量或首轮全量拉取
+- `POST /api/upload/image`：上传图片
+- `GET /api/upload/image/:id`：读取图片
+- `GET /api/health`：健康检查
+
+说明：
+
+- 左侧列表在本地仍会保留 `preview` 摘要字段，用于卡片预览，但不会持有完整正文详情。
+- 完整正文只在详情读取或同步变更接口中返回。
 
 ## Google 登录说明
 

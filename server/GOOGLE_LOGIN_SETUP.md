@@ -40,6 +40,11 @@
 
 当前实现里，Google 登录成功后会直接进入明文同步模式，不再要求用户额外输入同步口令。
 
+当前服务端实际入口为：
+
+- 启动授权：`GET /api/auth/google/start`
+- Google 回调：`GET /api/auth/google/callback`
+
 ## 2. 在 Google Cloud Console 创建项目
 
 1. 打开 Google Cloud Console。
