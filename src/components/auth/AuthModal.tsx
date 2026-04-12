@@ -16,6 +16,7 @@ export function AuthModal({ onClose }: AuthModalProps) {
 
   const login = useNoteStore((s) => s.login)
   const register = useNoteStore((s) => s.register)
+  const loginWithGoogle = useNoteStore((s) => s.loginWithGoogle)
   const syncStatus = useNoteStore((s) => s.syncStatus)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -29,10 +30,27 @@ export function AuthModal({ onClose }: AuthModalProps) {
       } else {
         await register(email, password)
       }
+
       // 成功后关闭模态框
       onClose()
     } catch (err: any) {
       setError(err.message || '操作失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGoogleLogin = async () => {
+    setError('')
+    setLoading(true)
+
+    try {
+      await loginWithGoogle()
+      if (useNoteStore.getState().isAuthenticated) {
+        onClose()
+      }
+    } catch (err: any) {
+      setError(err.message || 'Google 登录失败')
     } finally {
       setLoading(false)
     }
@@ -46,6 +64,8 @@ export function AuthModal({ onClose }: AuthModalProps) {
       width={420}
       destroyOnClose
       maskClosable={!loading}
+      closable={!loading}
+      keyboard={!loading}
       onCancel={onClose}
       className="auth-modal"
     >
@@ -83,37 +103,39 @@ export function AuthModal({ onClose }: AuthModalProps) {
         />
 
         <form onSubmit={handleSubmit} className="auth-form">
-          <div className="auth-field">
-            <label className="auth-field__label">
-              邮箱
-            </label>
-            <Input
-              type="email"
-              size="large"
-              prefix={<MailOutlined />}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="auth-input"
-              placeholder="your@email.com"
-              required
-            />
-          </div>
+          <>
+            <div className="auth-field">
+              <label className="auth-field__label">
+                邮箱
+              </label>
+              <Input
+                type="email"
+                size="large"
+                prefix={<MailOutlined />}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="auth-input"
+                placeholder="your@email.com"
+                required
+              />
+            </div>
 
-          <div className="auth-field">
-            <label className="auth-field__label">
-              密码
-            </label>
-            <Input.Password
-              size="large"
-              prefix={<LockOutlined />}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="auth-input"
-              placeholder="••••••••"
-              required
-              minLength={6}
-            />
-          </div>
+            <div className="auth-field">
+              <label className="auth-field__label">
+                密码
+              </label>
+              <Input.Password
+                size="large"
+                prefix={<LockOutlined />}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="auth-input"
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
+            </div>
+          </>
 
           {error && (
             <Alert showIcon type="error" message={error} />
@@ -127,8 +149,29 @@ export function AuthModal({ onClose }: AuthModalProps) {
             disabled={loading}
             loading={loading}
           >
-            {loading ? '处理中...' : isLogin ? '登录并同步' : '注册并开始同步'}
+            {loading
+              ? '处理中...'
+              : isLogin
+                ? '登录并同步'
+                : '注册并开始同步'}
           </Button>
+
+          <>
+            <div className="auth-oauth-divider">
+              <span>或</span>
+            </div>
+
+            <Button
+              size="large"
+              block
+              className="auth-google-button"
+              disabled={loading}
+              onClick={handleGoogleLogin}
+            >
+              <span className="auth-google-button__mark">G</span>
+              <span>使用 Google 登录</span>
+            </Button>
+          </>
         </form>
 
         <div className="auth-footer-copy">
@@ -142,7 +185,9 @@ export function AuthModal({ onClose }: AuthModalProps) {
             {isLogin ? '没有账号？注册' : '已有账号？登录'}
           </Button>
 
-          <Typography.Text className="auth-helper-text">数据默认先保存在本地。</Typography.Text>
+          <Typography.Text className="auth-helper-text">
+            数据默认先保存在本地。
+          </Typography.Text>
         </div>
       </div>
     </Modal>

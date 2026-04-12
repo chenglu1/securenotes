@@ -8,8 +8,17 @@ export class User {
   @Column({ unique: true })
   email!: string;
 
-  @Column()
-  passwordHash!: string;
+  @Column({ type: 'character varying', nullable: true })
+  passwordHash!: string | null;
+
+  @Column({ type: 'character varying', nullable: true, unique: true })
+  googleSub!: string | null;
+
+  @Column({ default: false })
+  emailVerified!: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  keyVerifier!: string | null;
 
   @Column({ type: 'text', nullable: true })
   publicKey!: string | null; // Base64-encoded public key for sealed box encryption

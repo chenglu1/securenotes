@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+export interface GoogleAuthResult {
+  token: string
+  userId: string
+  keySalt: string
+  email?: string
+  isNewUser?: boolean
+}
+
 // Type-safe API exposed to the renderer process
 const api = {
   // ── Notes ──────────────────────────────────────────────
@@ -53,6 +61,8 @@ const api = {
   saveAuthSession: (session: { token: string; userId: string; email?: string }) =>
     ipcRenderer.invoke('auth:saveSession', session),
   clearAuthSession: () => ipcRenderer.invoke('auth:clearSession'),
+  startGoogleLogin: (startUrl: string): Promise<GoogleAuthResult> =>
+    ipcRenderer.invoke('auth:startGoogleLogin', startUrl),
   getEncryptionKey: (userId: string) => ipcRenderer.invoke('auth:getEncryptionKey', userId),
   saveEncryptionKey: (userId: string, key: string) =>
     ipcRenderer.invoke('auth:saveEncryptionKey', userId, key),

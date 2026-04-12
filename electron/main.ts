@@ -1,7 +1,8 @@
 // Electron Main Process
 import { cpSync, existsSync, mkdirSync } from 'fs'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { app, BrowserWindow, shell } from 'electron'
+import { APP_PROTOCOL, handleGoogleAuthCallback } from './google-auth'
 import { createTray, destroyTray } from './tray'
 
 const CANONICAL_USER_DATA_DIR = 'securenotes'
@@ -43,6 +44,15 @@ let win: BrowserWindow | null
 let isQuitting = false
 const preload = join(__dirname, './preload.js')
 const url = process.env['VITE_DEV_SERVER_URL']
+const initialDeepLink = process.argv.find((arg) => arg.startsWith(`${APP_PROTOCOL}://`)) ?? null
+
+registerProtocolClient()
+
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+  app.quit()
+}
 
 function createWindow() {
   const PUBLIC = app.isPackaged ? DIST : join(DIST, '../public')
@@ -90,17 +100,62 @@ function createWindow() {
   })
 }
 
+function registerProtocolClient() {
+  if (process.defaultApp && process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(APP_PROTOCOL, process.execPath, [resolve(process.argv[1])])
+    return
+  }
+
+  app.setAsDefaultProtocolClient(APP_PROTOCOL)
+}
+
+function focusMainWindow() {
+  if (!win) {
+    return
+  }
+
+  if (win.isMinimized()) {
+    win.restore()
+  }
+
+  win.show()
+  win.focus()
+}
+
+if (gotTheLock) {
+  app.on('second-instance', (_event, commandLine) => {
+    const deepLink = commandLine.find((arg) => arg.startsWith(`${APP_PROTOCOL}://`))
+    if (deepLink) {
+      handleGoogleAuthCallback(deepLink)
+    }
+
+    focusMainWindow()
+  })
+}
+
+app.on('open-url', (event, rawUrl) => {
+  event.preventDefault()
+  handleGoogleAuthCallback(rawUrl)
+  focusMainWindow()
+})
+
 // Register IPC handlers AFTER app is ready, using dynamic import
 // to avoid premature access to app.getPath() in imported modules
-app.whenReady().then(async () => {
-  createWindow()
-  
-  const { registerIpcHandlers } = await import('./ipc-handlers')
-  await registerIpcHandlers(win)
-  
-  // 创建系统托盘
-  createTray(win)
-})
+if (gotTheLock) {
+  app.whenReady().then(async () => {
+    createWindow()
+
+    const { registerIpcHandlers } = await import('./ipc-handlers')
+    await registerIpcHandlers(win)
+
+    if (initialDeepLink) {
+      handleGoogleAuthCallback(initialDeepLink)
+    }
+
+    // 创建系统托盘
+    createTray(win)
+  })
+}
 
 app.on('window-all-closed', () => {
   // 不自动退出，保持托盘运行

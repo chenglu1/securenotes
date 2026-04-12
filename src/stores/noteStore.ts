@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiUrl, getErrorMessage, isFetchError, readJson } from '../services/api'
-import { decryptText, deriveEncryptionKey, encryptText } from '../services/crypto'
+import { PLAINTEXT_SYNC_KEY, createKeyVerifier, decryptText, deriveEncryptionKey, encryptText } from '../services/crypto'
 
 export interface Note {
   id: string
@@ -28,6 +28,13 @@ interface AuthResponse {
   userId: string
   keySalt: string
   email?: string
+  isNewUser?: boolean
+  message?: string | string[]
+  error?: string
+}
+
+interface SyncKeyResponse {
+  status: 'created' | 'verified'
   message?: string | string[]
   error?: string
 }
@@ -103,16 +110,64 @@ function buildConflictCopyTitle(title: string): string {
 }
 
 function decodeJwtEmail(token: string): string | null {
+  const payload = decodeJwtPayload(token)
+  const email = payload?.email
+  return typeof email === 'string' && email.trim() ? email : null
+}
+
+function decodeJwtAuthMethod(token: string): 'password' | 'google' | null {
+  const payload = decodeJwtPayload(token)
+  return payload?.authMethod === 'google' || payload?.authMethod === 'password'
+    ? payload.authMethod
+    : null
+}
+
+function decodeJwtPayload(token: string): { email?: unknown; authMethod?: unknown } | null {
   try {
     const [, payload] = token.split('.')
     if (!payload) return null
     const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
     const decoded = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='))
-    const parsed = JSON.parse(decoded) as { email?: unknown }
-    return typeof parsed.email === 'string' && parsed.email.trim() ? parsed.email : null
+    return JSON.parse(decoded) as { email?: unknown; authMethod?: unknown }
   } catch {
     return null
   }
+}
+
+async function ensureRemoteSyncKey(token: string, encryptionKey: string): Promise<void> {
+  const keyVerifier = await createKeyVerifier(encryptionKey)
+  const response = await fetch(apiUrl('/auth/sync-key'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ keyVerifier }),
+  })
+
+  const payload = await readJson<SyncKeyResponse>(response)
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, '同步口令校验失败'))
+  }
+}
+
+async function persistAuthenticatedSession(
+  payload: AuthResponse,
+  encryptionKey: string,
+): Promise<{ userEmail: string | null }> {
+  const userEmail = payload.email ?? decodeJwtEmail(payload.token)
+
+  await window.api.saveAuthSession({
+    token: payload.token,
+    userId: payload.userId,
+    email: userEmail ?? undefined,
+  })
+  await window.api.saveEncryptionKey(payload.userId, encryptionKey)
+  await window.api.claimLocalNotes(payload.userId)
+  localStorage.removeItem('auth_token')
+  localStorage.removeItem('user_id')
+
+  return { userEmail }
 }
 
 function parseTimestamp(value: string | null | undefined): number | null {
@@ -339,6 +394,7 @@ interface NoteStore {
   userEmail: string | null
   token: string | null
   encryptionKey: string | null
+  pendingGoogleAuth: AuthResponse | null
   syncStatus: SyncStatus
   syncAllStatus: SyncActionStatus
   syncCurrentStatus: SyncActionStatus
@@ -361,6 +417,9 @@ interface NoteStore {
   initAuth: () => Promise<void>
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string) => Promise<void>
+  loginWithGoogle: () => Promise<void>
+  completeGoogleLogin: (passphrase: string) => Promise<void>
+  clearPendingGoogleAuth: () => void
   logout: () => Promise<void>
   pullFromCloud: () => Promise<void>
   syncNoteToCloud: (noteId: string) => Promise<void>
@@ -382,6 +441,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   userEmail: null,
   token: null,
   encryptionKey: null,
+  pendingGoogleAuth: null,
   syncStatus: 'idle',
   syncAllStatus: 'idle',
   syncCurrentStatus: 'idle',
@@ -546,8 +606,14 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     }
     
     if (session?.token && session.userId) {
-      const encryptionKey = await window.api.getEncryptionKey(session.userId)
+      let encryptionKey = await window.api.getEncryptionKey(session.userId)
       const userEmail = session.email ?? decodeJwtEmail(session.token)
+      const authMethod = decodeJwtAuthMethod(session.token)
+
+      if (!encryptionKey && authMethod === 'google') {
+        encryptionKey = PLAINTEXT_SYNC_KEY
+        await window.api.saveEncryptionKey(session.userId, encryptionKey)
+      }
 
       if (!encryptionKey) {
         console.warn('⚠️ Missing encryption key for saved session, re-login is required.')
@@ -564,6 +630,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
           userEmail: null,
           token: null,
           encryptionKey: null,
+          pendingGoogleAuth: null,
           syncStatus: 'reauth-required',
           syncAllStatus: 'idle',
           syncCurrentStatus: 'idle',
@@ -579,6 +646,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         userEmail,
         token: session.token,
         encryptionKey,
+        pendingGoogleAuth: null,
       })
       
       // 登录后自动拉取云端数据
@@ -608,16 +676,11 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       }
       
       const { token, userId, keySalt } = payload
-      const userEmail = payload.email ?? decodeJwtEmail(token)
       const encryptionKey = await deriveEncryptionKey(password, keySalt)
+      await ensureRemoteSyncKey(token, encryptionKey)
+      const { userEmail } = await persistAuthenticatedSession(payload, encryptionKey)
       
-      await window.api.saveAuthSession({ token, userId, email: userEmail ?? undefined })
-      await window.api.saveEncryptionKey(userId, encryptionKey)
-      await window.api.claimLocalNotes(userId)
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('user_id')
-      
-      set({ isAuthenticated: true, userId, userEmail, token, encryptionKey, syncStatus: 'idle', syncAllStatus: 'idle', syncCurrentStatus: 'idle' })
+      set({ isAuthenticated: true, userId, userEmail, token, encryptionKey, pendingGoogleAuth: null, syncStatus: 'idle', syncAllStatus: 'idle', syncCurrentStatus: 'idle' })
       
       // Sync after login
       await get().syncToCloud()
@@ -641,16 +704,11 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       }
       
       const { token, userId, keySalt } = payload
-      const userEmail = payload.email ?? decodeJwtEmail(token)
       const encryptionKey = await deriveEncryptionKey(password, keySalt)
+      await ensureRemoteSyncKey(token, encryptionKey)
+      const { userEmail } = await persistAuthenticatedSession(payload, encryptionKey)
       
-      await window.api.saveAuthSession({ token, userId, email: userEmail ?? undefined })
-      await window.api.saveEncryptionKey(userId, encryptionKey)
-      await window.api.claimLocalNotes(userId)
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('user_id')
-      
-      set({ isAuthenticated: true, userId, userEmail, token, encryptionKey, syncStatus: 'idle', syncAllStatus: 'idle', syncCurrentStatus: 'idle' })
+      set({ isAuthenticated: true, userId, userEmail, token, encryptionKey, pendingGoogleAuth: null, syncStatus: 'idle', syncAllStatus: 'idle', syncCurrentStatus: 'idle' })
       
       // Sync after register
       await get().syncToCloud()
@@ -658,6 +716,71 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       console.error('Register failed:', err)
       throw err
     }
+  },
+
+  loginWithGoogle: async () => {
+    try {
+      const payload = await window.api.startGoogleLogin(apiUrl('/auth/google/start'))
+      const cachedKey = await window.api.getEncryptionKey(payload.userId)
+      const encryptionKey = cachedKey ?? PLAINTEXT_SYNC_KEY
+
+      if (cachedKey && cachedKey !== PLAINTEXT_SYNC_KEY) {
+        await ensureRemoteSyncKey(payload.token, cachedKey)
+      }
+
+      const { userEmail } = await persistAuthenticatedSession(payload, encryptionKey)
+
+      set({
+        isAuthenticated: true,
+        userId: payload.userId,
+        userEmail,
+        token: payload.token,
+        encryptionKey,
+        pendingGoogleAuth: null,
+        syncStatus: 'idle',
+        syncAllStatus: 'idle',
+        syncCurrentStatus: 'idle',
+      })
+
+      await get().syncToCloud()
+    } catch (err) {
+      console.error('Google login failed:', err)
+      throw err
+    }
+  },
+
+  completeGoogleLogin: async (passphrase) => {
+    const payload = get().pendingGoogleAuth
+    if (!payload) {
+      throw new Error('没有待完成的 Google 登录。')
+    }
+
+    try {
+      const encryptionKey = await deriveEncryptionKey(passphrase, payload.keySalt)
+      await ensureRemoteSyncKey(payload.token, encryptionKey)
+      const { userEmail } = await persistAuthenticatedSession(payload, encryptionKey)
+
+      set({
+        isAuthenticated: true,
+        userId: payload.userId,
+        userEmail,
+        token: payload.token,
+        encryptionKey,
+        pendingGoogleAuth: null,
+        syncStatus: 'idle',
+        syncAllStatus: 'idle',
+        syncCurrentStatus: 'idle',
+      })
+
+      await get().syncToCloud()
+    } catch (err) {
+      console.error('Failed to finish Google login:', err)
+      throw err
+    }
+  },
+
+  clearPendingGoogleAuth: () => {
+    set({ pendingGoogleAuth: null })
   },
 
   logout: async () => {
@@ -678,6 +801,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       userEmail: null,
       token: null,
       encryptionKey: null,
+      pendingGoogleAuth: null,
       syncStatus: 'idle',
       syncAllStatus: 'idle',
       syncCurrentStatus: 'idle',
@@ -699,11 +823,12 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         userEmail: null,
         token: null,
         encryptionKey: null,
+        pendingGoogleAuth: null,
         syncStatus: 'reauth-required',
         syncAllStatus: 'idle',
         syncCurrentStatus: 'idle',
       })
-      throw new Error('请重新登录以恢复加密同步')
+      throw new Error('请重新登录以恢复同步')
     }
 
     try {
@@ -729,6 +854,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
           userEmail: null,
           token: null,
           encryptionKey: null,
+          pendingGoogleAuth: null,
           syncStatus: 'reauth-required',
           syncAllStatus: 'idle',
           syncCurrentStatus: 'idle',
@@ -788,6 +914,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         userEmail: null,
         token: null,
         encryptionKey: null,
+        pendingGoogleAuth: null,
         syncStatus: 'reauth-required',
         syncAllStatus: 'idle',
         syncCurrentStatus: 'idle',
@@ -850,6 +977,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         userEmail: null,
         token: null,
         encryptionKey: null,
+        pendingGoogleAuth: null,
         syncStatus: 'reauth-required',
         syncAllStatus: 'idle',
         syncCurrentStatus: 'idle',

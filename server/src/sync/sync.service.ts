@@ -11,7 +11,8 @@ export class SyncService {
 
   /**
    * Push a note update from the client.
-   * The server stores encrypted content — it never sees plaintext.
+    * The server stores whatever the client sends. Older clients send encrypted
+    * payloads, while the current Google plaintext mode uploads raw text.
    */
   async pushNote(userId: string, noteData: PushNoteDto): Promise<PushNoteResult> {
     let note = await this.noteRepo.findOne({

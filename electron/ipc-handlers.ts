@@ -11,6 +11,7 @@ import {
   saveAuthSession,
   saveEncryptionKey,
 } from './secure-store'
+import { startGoogleAuth } from './google-auth'
 
 const notes = new NotesRepository()
 const tags = new TagsRepository()
@@ -58,6 +59,7 @@ export async function registerIpcHandlers(win: BrowserWindow | null) {
   ipcMain.handle('auth:clearSession', () => {
     clearAuthSession()
   })
+  ipcMain.handle('auth:startGoogleLogin', (_e, startUrl: string) => startGoogleAuth(startUrl))
   ipcMain.handle('auth:getEncryptionKey', (_e, userId: string) => getEncryptionKey(userId))
   ipcMain.handle('auth:saveEncryptionKey', (_e, userId: string, key: string) => {
     saveEncryptionKey(userId, key)

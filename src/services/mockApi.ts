@@ -204,6 +204,9 @@ export const mockApi = {
   clearAuthSession: async () => {
     authSession = null
   },
+  startGoogleLogin: async () => {
+    throw new Error('浏览器模式下不支持 Google OAuth 桌面登录，请使用 Electron 客户端。')
+  },
   getEncryptionKey: async (userId: string) => encryptionKeys.get(userId) ?? null,
   saveEncryptionKey: async (userId: string, key: string) => {
     encryptionKeys.set(userId, key)

@@ -4,6 +4,14 @@
 {
   "appId": "YourAppID",
   "asar": true,
+  "protocols": [
+    {
+      "name": "SecureNotes",
+      "schemes": [
+        "securenotes"
+      ]
+    }
+  ],
   "directories": {
     "output": "release/${version}"
   },
