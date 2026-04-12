@@ -14,7 +14,7 @@ export class SyncService {
     * The server stores whatever the client sends. Older clients send encrypted
     * payloads, while the current Google plaintext mode uploads raw text.
    */
-  async pushNote(userId: string, noteData: PushNoteDto): Promise<PushNoteResult> {
+  async upsertNote(userId: string, noteData: UpsertNoteDto): Promise<UpsertNoteResult> {
     let note = await this.noteRepo.findOne({
       where: { id: noteData.id, userId },
     });
@@ -51,7 +51,7 @@ export class SyncService {
   /**
    * Pull notes updated since the given sync version
    */
-  async pullNotes(userId: string, sinceVersion: number): Promise<{ notes: Note[]; latestVersion: number }> {
+  async listNoteChanges(userId: string, sinceVersion: number): Promise<{ notes: Note[]; latestVersion: number }> {
     const notes = await this.noteRepo.find({
       where: {
         userId,
@@ -70,7 +70,7 @@ export class SyncService {
   /**
    * Get all notes for a user
    */
-  async getAllNotes(userId: string): Promise<Note[]> {
+  async listNotes(userId: string): Promise<Note[]> {
     return this.noteRepo.find({
       where: { userId },
       order: { updatedAt: 'DESC' },
@@ -78,7 +78,7 @@ export class SyncService {
   }
 }
 
-export interface PushNoteDto {
+export interface UpsertNoteDto {
   id: string;
   encryptedTitle: string;
   encryptedContent: string;
@@ -87,7 +87,7 @@ export interface PushNoteDto {
   deletedAt?: string;
 }
 
-export interface PushNoteResult {
+export interface UpsertNoteResult {
   status: 'created' | 'updated' | 'conflict';
   note: Note;
 }

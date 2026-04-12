@@ -1,8 +1,19 @@
-import { Controller, Post, Get, Body, Query, Headers, UnauthorizedException, ConflictException } from '@nestjs/common';
-import { SyncService, PushNoteDto } from './sync.service';
+import {
+  Body,
+  ConflictException,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Put,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { SyncService, UpsertNoteDto } from './sync.service';
 import { AuthService } from '../auth/auth.service';
+import { ok } from '../common/http/api-response';
 
-@Controller('sync')
+@Controller('notes')
 export class SyncController {
   constructor(
     private syncService: SyncService,
@@ -18,37 +29,60 @@ export class SyncController {
     return userId;
   }
 
-  @Post('push')
-  async push(
-    @Body() body: PushNoteDto,
+  @Put(':id')
+  async upsert(
+    @Param('id') id: string,
+    @Body() body: UpsertNoteDto,
     @Headers('authorization') auth?: string,
   ) {
     const userId = await this.getUserId(auth);
-    const result = await this.syncService.pushNote(userId, body);
+    const result = await this.syncService.upsertNote(userId, { ...body, id } as UpsertNoteDto & { id: string });
     if (result.status === 'conflict') {
       throw new ConflictException({
         message: 'Note version conflict',
-        status: result.status,
-        note: result.note,
+        data: {
+          action: result.status,
+          note: result.note,
+        },
       });
     }
 
-    return { success: true, status: result.status, note: result.note };
+    return ok(
+      {
+        action: result.status,
+        note: result.note,
+      },
+      result.status === 'created' ? '笔记创建成功' : '笔记更新成功',
+    );
   }
 
-  @Get('pull')
-  async pull(
-    @Query('since') since: string,
+  @Get('changes')
+  async listChanges(
+    @Query('sinceVersion') sinceVersion: string,
     @Headers('authorization') auth?: string,
   ) {
     const userId = await this.getUserId(auth);
-    const sinceVersion = parseInt(since) || 0;
-    return this.syncService.pullNotes(userId, sinceVersion);
+    const latestVersion = parseInt(sinceVersion) || 0;
+    const result = await this.syncService.listNoteChanges(userId, latestVersion);
+    return ok(
+      {
+        items: result.notes,
+        latestVersion: result.latestVersion,
+      },
+      '获取笔记增量成功',
+    );
   }
 
-  @Get('notes')
-  async getAllNotes(@Headers('authorization') auth?: string) {
+  @Get()
+  async listNotes(@Headers('authorization') auth?: string) {
     const userId = await this.getUserId(auth);
-    return this.syncService.getAllNotes(userId);
+    const notes = await this.syncService.listNotes(userId);
+    return ok(
+      {
+        items: notes,
+        total: notes.length,
+      },
+      '获取笔记列表成功',
+    );
   }
 }

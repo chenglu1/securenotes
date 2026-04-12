@@ -69,12 +69,11 @@ export async function registerIpcHandlers(win: BrowserWindow | null) {
   })
 
   // ── Notes ──────────────────────────────────────────────
-  ipcMain.handle('notes:getAll', () => notes.getAll())
+  ipcMain.handle('notes:listSummaries', (_e, query?: string) => notes.getSummaries(query))
   ipcMain.handle('notes:getById', (_e, id: string) => notes.getById(id))
   ipcMain.handle('notes:create', (_e, data: { title?: string; content?: string }) => notes.create(data))
   ipcMain.handle('notes:update', (_e, id: string, data: { title?: string; content?: string }) => notes.update(id, data))
   ipcMain.handle('notes:delete', (_e, id: string) => notes.delete(id))
-  ipcMain.handle('notes:search', (_e, query: string) => notes.search(query))
   ipcMain.handle('notes:getDirty', () => notes.getDirty())
   ipcMain.handle('notes:markSynced', (_e, id: string, syncVersion: number) => notes.markSynced(id, syncVersion))
   ipcMain.handle('notes:upsertFromCloud', (_e, cloudNote: any, options?: { force?: boolean }) => notes.upsertFromCloud(cloudNote, options))

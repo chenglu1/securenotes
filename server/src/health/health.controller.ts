@@ -1,5 +1,6 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { ok } from '../common/http/api-response';
 
 @Controller('health')
 export class HealthController {
@@ -10,16 +11,17 @@ export class HealthController {
     try {
       await this.dataSource.query('SELECT 1');
 
-      return {
+      return ok({
         status: 'ok',
         database: 'up',
-        timestamp: new Date().toISOString(),
-      };
+      });
     } catch {
       throw new ServiceUnavailableException({
-        status: 'error',
-        database: 'down',
-        timestamp: new Date().toISOString(),
+        message: 'Database unavailable',
+        data: {
+          status: 'error',
+          database: 'down',
+        },
       });
     }
   }

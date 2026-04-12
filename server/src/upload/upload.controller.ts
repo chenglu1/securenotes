@@ -12,6 +12,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { UploadService } from './upload.service';
+import { ok } from '../common/http/api-response';
 
 @Controller('upload')
 export class UploadController {
@@ -40,11 +41,11 @@ export class UploadController {
     // 返回相对 URL 路径（通过 Vite 代理访问）
     const imageUrl = `/api/upload/image/${imageId}`;
 
-    return {
+    return ok({
       url: imageUrl,
       filename: file.originalname,
       size: file.size,
-    };
+    }, '图片上传成功');
   }
 
   @Get('image/:id')

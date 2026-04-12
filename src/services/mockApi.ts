@@ -18,6 +18,17 @@ interface Note {
   last_synced_version?: number
 }
 
+interface NoteSummary {
+  id: string
+  title: string
+  preview: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  sync_version: number
+  is_dirty: number
+}
+
 type StoredNote = Note & { owner_user_id: string }
 
 interface Tag {
@@ -34,12 +45,52 @@ let authSession: { token: string; userId: string; email?: string } | null = null
 const encryptionKeys = new Map<string, string>()
 const LOCAL_NOTE_SCOPE = '__local__'
 
+function isPristineLocalDraft(note: Pick<StoredNote, 'title' | 'content' | 'created_at' | 'updated_at' | 'deleted_at' | 'sync_version' | 'last_synced_version'>) {
+  return (
+    !note.deleted_at &&
+    (note.sync_version ?? 0) === 0 &&
+    (note.last_synced_version ?? 0) === 0 &&
+    note.created_at === note.updated_at &&
+    note.title.trim().length === 0 &&
+    note.content.trim().length === 0
+  )
+}
+
 function getCurrentScope() {
   return authSession?.userId ?? LOCAL_NOTE_SCOPE
 }
 
+function buildPreview(content: string) {
+  return content.slice(0, 240)
+}
+
 export const mockApi = {
-  getNotes: async () => notes.filter((n) => n.owner_user_id === getCurrentScope() && !n.deleted_at),
+  getNoteSummaries: async (query?: string): Promise<NoteSummary[]> => {
+    const normalizedQuery = query?.trim().toLowerCase()
+    return notes
+      .filter((note) => {
+        if (note.owner_user_id !== getCurrentScope() || note.deleted_at) {
+          return false
+        }
+
+        if (!normalizedQuery) {
+          return true
+        }
+
+        return `${note.title} ${note.content}`.toLowerCase().includes(normalizedQuery)
+      })
+      .map((note) => ({
+        id: note.id,
+        title: note.title,
+        preview: buildPreview(note.content),
+        created_at: note.created_at,
+        updated_at: note.updated_at,
+        deleted_at: note.deleted_at,
+        sync_version: note.sync_version,
+        is_dirty: note.is_dirty,
+      }))
+      .sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at))
+  },
   getNote: async (id: string) => notes.find((n) => n.id === id && n.owner_user_id === getCurrentScope() && !n.deleted_at),
   createNote: async (data: { title?: string; content?: string }) => {
     const now = new Date().toISOString()
@@ -52,7 +103,7 @@ export const mockApi = {
       updated_at: now,
       deleted_at: null,
       sync_version: 0,
-      is_dirty: 1,
+      is_dirty: 0,
       last_synced_title: null,
       last_synced_content: null,
       last_synced_deleted_at: null,
@@ -78,23 +129,20 @@ export const mockApi = {
     return note
   },
   deleteNote: async (id: string) => {
-    const note = notes.find((n) => n.id === id && n.owner_user_id === getCurrentScope())
+    const noteIndex = notes.findIndex((n) => n.id === id && n.owner_user_id === getCurrentScope())
+    const note = noteIndex >= 0 ? notes[noteIndex] : undefined
     if (note) {
+      if (isPristineLocalDraft(note) || ((note.sync_version ?? 0) === 0 && (note.last_synced_version ?? 0) === 0)) {
+        notes.splice(noteIndex, 1)
+        return true
+      }
+
       note.deleted_at = new Date().toISOString()
       note.is_dirty = 1
     }
     return !!note
   },
-  searchNotes: async (query: string) => {
-    const q = query.toLowerCase()
-    return notes.filter(
-      (n) =>
-        n.owner_user_id === getCurrentScope() &&
-        !n.deleted_at &&
-        (n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q))
-    )
-  },
-  getDirtyNotes: async () => notes.filter((n) => n.owner_user_id === getCurrentScope() && n.is_dirty === 1),
+  getDirtyNotes: async () => notes.filter((n) => n.owner_user_id === getCurrentScope() && n.is_dirty === 1 && !isPristineLocalDraft(n)),
   markNoteSynced: async (id: string, syncVersion: number) => {
     const note = notes.find((n) => n.id === id && n.owner_user_id === getCurrentScope())
     if (!note) return

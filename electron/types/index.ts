@@ -15,6 +15,17 @@ export interface Note {
   last_synced_version?: number
 }
 
+export interface NoteSummary {
+  id: string
+  title: string
+  preview: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  sync_version: number
+  is_dirty: number
+}
+
 export interface Tag {
   id: string
   name: string

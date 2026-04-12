@@ -9,12 +9,10 @@ import { Alert, Button, Input, Tag, Tooltip, Typography } from 'antd'
 import { ConfigurableTiptapEditor } from '@chenglu1/xeditor-editor'
 import '@chenglu1/xeditor-editor/styles.css'
 import { useNoteStore, type Note } from '../../stores/noteStore'
-import { apiUrl, getErrorMessage, readJson, resolveApiUrl } from '../../services/api'
+import { ApiResponse, apiUrl, getErrorMessage, readJson, resolveApiUrl, unwrapApiResponse } from '../../services/api'
 
 interface UploadResponse {
   url: string
-  message?: string | string[]
-  error?: string
 }
 
 type SyncActionStatus = 'idle' | 'syncing' | 'success' | 'error'
@@ -176,8 +174,9 @@ function SelectedNoteEditor({
     [],
   )
 
-  const syncTagColor = note.is_dirty ? 'warning' : isAuthenticated ? 'success' : 'default'
-  const syncTagLabel = note.is_dirty ? '未同步' : isAuthenticated ? '已同步' : '本地草稿'
+  const hasCloudSnapshot = note.sync_version > 0
+  const syncTagColor = note.is_dirty ? 'warning' : isAuthenticated && hasCloudSnapshot ? 'success' : 'default'
+  const syncTagLabel = note.is_dirty ? '未同步' : isAuthenticated && hasCloudSnapshot ? '已同步' : '本地草稿'
   const syncStateLabel =
     syncCurrentStatus === 'syncing'
       ? '同步中'
@@ -270,7 +269,7 @@ function SelectedNoteEditor({
 
 export function EditorPane() {
   const selectedNoteId = useNoteStore((s) => s.selectedNoteId)
-  const notes = useNoteStore((s) => s.notes)
+  const selectedNote = useNoteStore((s) => s.selectedNote)
   const createNote = useNoteStore((s) => s.createNote)
   const updateNote = useNoteStore((s) => s.updateNote)
   const deleteNote = useNoteStore((s) => s.deleteNote)
@@ -278,8 +277,6 @@ export function EditorPane() {
   const syncStatus = useNoteStore((s) => s.syncStatus)
   const syncCurrentStatus = useNoteStore((s) => s.syncCurrentStatus)
   const syncNoteToCloud = useNoteStore((s) => s.syncNoteToCloud)
-
-  const selectedNote = notes.find((n) => n.id === selectedNoteId)
 
   const handleCreateFromEmpty = useCallback(async () => {
     await createNote()
@@ -295,12 +292,13 @@ export function EditorPane() {
       body: formData,
     })
 
-    const payload = await readJson<UploadResponse>(response)
-    if (!response.ok || !payload?.url) {
+    const payload = await readJson<ApiResponse<UploadResponse>>(response)
+    const data = unwrapApiResponse(payload)
+    if (!response.ok || !data?.url) {
       throw new Error(getErrorMessage(payload, '图片上传失败'))
     }
 
-    return resolveApiUrl(payload.url)
+    return resolveApiUrl(data.url)
   }, []) as NoteImageUploadHandler
 
   if (!selectedNote) {

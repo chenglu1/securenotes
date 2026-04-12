@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { apiUrl, getErrorMessage, isFetchError, readJson } from '../services/api'
+import { ApiResponse, apiUrl, getErrorMessage, isFetchError, readJson, unwrapApiResponse } from '../services/api'
 import { PLAINTEXT_SYNC_KEY, createKeyVerifier, decryptText, deriveEncryptionKey, encryptText } from '../services/crypto'
 
 export interface Note {
@@ -17,6 +17,17 @@ export interface Note {
   last_synced_version?: number
 }
 
+export interface NoteSummary {
+  id: string
+  title: string
+  preview: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  sync_version: number
+  is_dirty: number
+}
+
 export interface Tag {
   id: string
   name: string
@@ -29,14 +40,10 @@ interface AuthResponse {
   keySalt: string
   email?: string
   isNewUser?: boolean
-  message?: string | string[]
-  error?: string
 }
 
 interface SyncKeyResponse {
   status: 'created' | 'verified'
-  message?: string | string[]
-  error?: string
 }
 
 interface CloudNote {
@@ -49,19 +56,19 @@ interface CloudNote {
   deletedAt?: string | null
 }
 
-interface SyncPushResponse {
-  success: true
-  status: 'created' | 'updated'
+interface NoteMutationResponse {
+  action: 'created' | 'updated'
   note: CloudNote
-  message?: string | string[]
-  error?: string
 }
 
-interface SyncConflictResponse {
-  status?: 'conflict'
+interface NoteConflictResponse {
+  action: 'conflict'
   note?: CloudNote
-  message?: string | string[]
-  error?: string
+}
+
+interface CloudNoteListResponse {
+  items: CloudNote[]
+  total: number
 }
 
 type EditorFlushHandler = () => Promise<void>
@@ -96,17 +103,50 @@ function toLocalCloudNote(cloudNote: CloudNote) {
   }
 }
 
-function getPayloadNote(payload: SyncPushResponse | SyncConflictResponse | null): CloudNote | undefined {
-  if (!payload || typeof payload !== 'object' || !('note' in payload)) {
+function getPayloadNote(
+  payload: ApiResponse<NoteMutationResponse | NoteConflictResponse> | null,
+): CloudNote | undefined {
+  const data = unwrapApiResponse(payload)
+  if (!data || typeof data !== 'object' || !('note' in data)) {
     return undefined
   }
 
-  return payload.note
+  return data.note
 }
 
 function buildConflictCopyTitle(title: string): string {
   const baseTitle = title.trim() || '无标题笔记'
   return baseTitle.endsWith('（冲突副本）') ? baseTitle : `${baseTitle}（冲突副本）`
+}
+
+async function fetchCloudNotesResponse(token: string): Promise<Response> {
+  return fetch(apiUrl('/notes'), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+}
+
+async function pushCloudNoteResponse(
+  note: Note,
+  token: string,
+  encryptedTitle: string,
+  encryptedContent: string,
+): Promise<Response> {
+  return fetch(apiUrl(`/notes/${note.id}`), {
+    method: 'PUT',
+    headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      encryptedTitle,
+      encryptedContent,
+      syncVersion: note.sync_version,
+      deletedAt: note.deleted_at,
+    }),
+  })
 }
 
 function decodeJwtEmail(token: string): string | null {
@@ -145,8 +185,9 @@ async function ensureRemoteSyncKey(token: string, encryptionKey: string): Promis
     body: JSON.stringify({ keyVerifier }),
   })
 
-  const payload = await readJson<SyncKeyResponse>(response)
-  if (!response.ok) {
+  const payload = await readJson<ApiResponse<SyncKeyResponse>>(response)
+  const data = unwrapApiResponse(payload)
+  if (!response.ok || !data) {
     throw new Error(getErrorMessage(payload, '同步口令校验失败'))
   }
 }
@@ -197,6 +238,33 @@ function isCloudSnapshotEqualToLocalSnapshot(
 
 function hasMeaningfulLocalContent(note: Note): boolean {
   return note.title.trim().length > 0 || note.content.trim().length > 0
+}
+
+function buildNotePreview(content: string): string {
+  return content.slice(0, 240)
+}
+
+function toNoteSummary(note: Note): NoteSummary {
+  return {
+    id: note.id,
+    title: note.title,
+    preview: buildNotePreview(note.content),
+    created_at: note.created_at,
+    updated_at: note.updated_at,
+    deleted_at: note.deleted_at,
+    sync_version: note.sync_version,
+    is_dirty: note.is_dirty,
+  }
+}
+
+function upsertNoteSummary(noteSummaries: NoteSummary[], note: Note): NoteSummary[] {
+  const nextSummary = toNoteSummary(note)
+  const existingIndex = noteSummaries.findIndex((item) => item.id === note.id)
+  const nextSummaries = existingIndex >= 0
+    ? noteSummaries.map((item) => item.id === note.id ? nextSummary : item)
+    : [nextSummary, ...noteSummaries]
+
+  return nextSummaries.sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at))
 }
 
 async function applyCloudNoteToLocal(cloudNote: CloudNote, encryptionKey: string, force = false) {
@@ -303,22 +371,14 @@ async function pushNoteToCloud(note: Note, token: string, encryptionKey: string)
   const encryptedTitle = await encryptText(note.title, encryptionKey)
   const encryptedContent = await encryptText(note.content, encryptionKey)
 
-  const response = await fetch(apiUrl('/sync/push'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      id: note.id,
-      encryptedTitle,
-      encryptedContent,
-      syncVersion: note.sync_version,
-      deletedAt: note.deleted_at,
-    }),
-  })
+  const response = await pushCloudNoteResponse(
+    note,
+    token,
+    encryptedTitle,
+    encryptedContent,
+  )
 
-  const payload = await readJson<SyncPushResponse | SyncConflictResponse>(response)
+  const payload = await readJson<ApiResponse<NoteMutationResponse | NoteConflictResponse>>(response)
 
   if (response.status === 409) {
     return {
@@ -380,8 +440,9 @@ async function resolveSyncConflict(note: Note, cloudNote: CloudNote, token: stri
 
 interface NoteStore {
   // ── State ──
-  notes: Note[]
+  notes: NoteSummary[]
   selectedNoteId: string | null
+  selectedNote: Note | null
   activeEditorNoteId: string | null
   activeEditorFlush: EditorFlushHandler | null
   searchQuery: string
@@ -401,6 +462,7 @@ interface NoteStore {
 
   // ── Actions ──
   loadNotes: () => Promise<void>
+  loadSelectedNote: (id: string | null) => Promise<void>
   flushActiveEditor: () => Promise<void>
   registerActiveEditorFlush: (noteId: string, flushHandler: EditorFlushHandler) => void
   unregisterActiveEditorFlush: (noteId: string) => void
@@ -429,6 +491,7 @@ interface NoteStore {
 export const useNoteStore = create<NoteStore>((set, get) => ({
   notes: [],
   selectedNoteId: null,
+  selectedNote: null,
   activeEditorNoteId: null,
   activeEditorFlush: null,
   searchQuery: '',
@@ -449,11 +512,43 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   loadNotes: async () => {
     set({ isLoading: true })
     try {
-      const notes = await window.api.getNotes()
-      set({ notes, isLoading: false })
+      const searchQuery = get().searchQuery.trim()
+      const notes = await window.api.getNoteSummaries(searchQuery || undefined)
+      const { selectedNoteId } = get()
+
+      if (!selectedNoteId) {
+        set({ notes, selectedNote: null, isLoading: false })
+        return
+      }
+
+      const selectedNote = await window.api.getNote(selectedNoteId)
+      set({
+        notes,
+        selectedNote: selectedNote ?? null,
+        selectedNoteId: selectedNote ? selectedNoteId : null,
+        isLoading: false,
+      })
     } catch (err) {
       console.error('Failed to load notes:', err)
       set({ isLoading: false })
+    }
+  },
+
+  loadSelectedNote: async (id) => {
+    if (!id) {
+      set({ selectedNote: null })
+      return
+    }
+
+    try {
+      const note = await window.api.getNote(id)
+      set({
+        selectedNote: note ?? null,
+        selectedNoteId: note ? id : null,
+      })
+    } catch (err) {
+      console.error(`Failed to load note detail (${id}):`, err)
+      set({ selectedNote: null, selectedNoteId: null })
     }
   },
 
@@ -494,7 +589,8 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       return
     }
 
-    set({ selectedNoteId: id, syncCurrentStatus: 'idle' })
+    set({ selectedNoteId: id, selectedNote: null, syncCurrentStatus: 'idle' })
+    await get().loadSelectedNote(id)
   },
 
   createNote: async () => {
@@ -504,8 +600,8 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         title: '',
         content: '',
       })
-      const notes = await window.api.getNotes()
-      set({ notes, selectedNoteId: note.id, syncStatus: 'idle', syncCurrentStatus: 'idle' })
+      set({ selectedNoteId: note.id, selectedNote: note, syncStatus: 'idle', syncCurrentStatus: 'idle' })
+      await get().loadNotes()
       return note
     } catch (err) {
       console.error('Failed to create note:', err)
@@ -515,7 +611,9 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   updateNote: async (id, data) => {
     try {
-      const currentNote = get().notes.find((note) => note.id === id)
+      const currentNote = get().selectedNote?.id === id
+        ? get().selectedNote
+        : await window.api.getNote(id)
       if (!currentNote) {
         return
       }
@@ -527,14 +625,18 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       }
 
       await window.api.updateNote(id, { title: nextTitle, content: nextContent })
+      const updatedAt = new Date().toISOString()
+      const updatedNote: Note = {
+        ...currentNote,
+        title: nextTitle,
+        content: nextContent,
+        updated_at: updatedAt,
+        is_dirty: 1,
+      }
 
-      // Update local state without full reload for snappiness
       set((state) => ({
-        notes: state.notes.map((n) =>
-          n.id === id
-            ? { ...n, title: nextTitle, content: nextContent, updated_at: new Date().toISOString(), is_dirty: 1 }
-            : n
-        ),
+        notes: upsertNoteSummary(state.notes, updatedNote),
+        selectedNote: state.selectedNoteId === id ? updatedNote : state.selectedNote,
         syncCurrentStatus: state.selectedNoteId === id ? 'idle' : state.syncCurrentStatus,
       }))
     } catch (err) {
@@ -546,12 +648,12 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     try {
       await window.api.deleteNote(id)
       const { selectedNoteId } = get()
-      const notes = await window.api.getNotes()
       set({
-        notes,
         selectedNoteId: selectedNoteId === id ? null : selectedNoteId,
+        selectedNote: selectedNoteId === id ? null : get().selectedNote,
         syncCurrentStatus: selectedNoteId === id ? 'idle' : get().syncCurrentStatus,
       })
+      await get().loadNotes()
     } catch (err) {
       console.error('Failed to delete note:', err)
     }
@@ -623,6 +725,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         set({
           notes: [],
           selectedNoteId: null,
+          selectedNote: null,
           activeEditorNoteId: null,
           activeEditorFlush: null,
           isAuthenticated: false,
@@ -669,16 +772,17 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
-      const payload = await readJson<AuthResponse>(response)
+      const payload = await readJson<ApiResponse<AuthResponse>>(response)
+      const data = unwrapApiResponse(payload)
       
-      if (!response.ok || !payload?.token || !payload.userId) {
+      if (!response.ok || !data?.token || !data.userId) {
         throw new Error(getErrorMessage(payload, '登录失败'))
       }
       
-      const { token, userId, keySalt } = payload
+      const { token, userId, keySalt } = data
       const encryptionKey = await deriveEncryptionKey(password, keySalt)
       await ensureRemoteSyncKey(token, encryptionKey)
-      const { userEmail } = await persistAuthenticatedSession(payload, encryptionKey)
+      const { userEmail } = await persistAuthenticatedSession(data, encryptionKey)
       
       set({ isAuthenticated: true, userId, userEmail, token, encryptionKey, pendingGoogleAuth: null, syncStatus: 'idle', syncAllStatus: 'idle', syncCurrentStatus: 'idle' })
       
@@ -697,16 +801,17 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
-      const payload = await readJson<AuthResponse>(response)
+      const payload = await readJson<ApiResponse<AuthResponse>>(response)
+      const data = unwrapApiResponse(payload)
       
-      if (!response.ok || !payload?.token || !payload.userId) {
+      if (!response.ok || !data?.token || !data.userId) {
         throw new Error(getErrorMessage(payload, '注册失败'))
       }
       
-      const { token, userId, keySalt } = payload
+      const { token, userId, keySalt } = data
       const encryptionKey = await deriveEncryptionKey(password, keySalt)
       await ensureRemoteSyncKey(token, encryptionKey)
-      const { userEmail } = await persistAuthenticatedSession(payload, encryptionKey)
+      const { userEmail } = await persistAuthenticatedSession(data, encryptionKey)
       
       set({ isAuthenticated: true, userId, userEmail, token, encryptionKey, pendingGoogleAuth: null, syncStatus: 'idle', syncAllStatus: 'idle', syncCurrentStatus: 'idle' })
       
@@ -794,6 +899,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     set({
       notes: [],
       selectedNoteId: null,
+      selectedNote: null,
       activeEditorNoteId: null,
       activeEditorFlush: null,
       isAuthenticated: false,
@@ -816,6 +922,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       set({
         notes: [],
         selectedNoteId: null,
+        selectedNote: null,
         activeEditorNoteId: null,
         activeEditorFlush: null,
         isAuthenticated: false,
@@ -835,18 +942,14 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       console.log('⬇️ Pulling notes from cloud...')
       
       // 获取云端所有笔记
-      const response = await fetch(apiUrl('/sync/notes'), {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      })
+      const response = await fetchCloudNotesResponse(token)
 
       if (response.status === 401 || response.status === 403) {
         await clearAuthForReauth(userId)
         set({
           notes: [],
           selectedNoteId: null,
+          selectedNote: null,
           activeEditorNoteId: null,
           activeEditorFlush: null,
           isAuthenticated: false,
@@ -862,10 +965,11 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         throw new Error('当前登录态属于其他后端环境，请重新登录。')
       }
 
-      const cloudNotes = await readJson<CloudNote[]>(response)
+      const payload = await readJson<ApiResponse<CloudNoteListResponse>>(response)
+      const cloudNotes = unwrapApiResponse(payload)?.items ?? null
 
       if (!response.ok || !Array.isArray(cloudNotes)) {
-        throw new Error('Failed to fetch cloud notes')
+        throw new Error(getErrorMessage(payload, 'Failed to fetch cloud notes'))
       }
 
       console.log(`📥 Received ${cloudNotes.length} notes from cloud`)
@@ -907,6 +1011,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       set({
         notes: [],
         selectedNoteId: null,
+        selectedNote: null,
         activeEditorNoteId: null,
         activeEditorFlush: null,
         isAuthenticated: false,
@@ -926,13 +1031,15 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       await get().flushActiveEditor()
     }
 
-    const note = get().notes.find((item) => item.id === noteId)
+    const note = get().selectedNote?.id === noteId
+      ? get().selectedNote
+      : await window.api.getNote(noteId)
     if (!note) {
       return
     }
 
     if (!note.is_dirty) {
-      set({ syncCurrentStatus: 'success' })
+      set({ syncCurrentStatus: note.sync_version > 0 ? 'success' : 'idle' })
       return
     }
 
@@ -970,6 +1077,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       set({
         notes: [],
         selectedNoteId: null,
+        selectedNote: null,
         activeEditorNoteId: null,
         activeEditorFlush: null,
         isAuthenticated: false,

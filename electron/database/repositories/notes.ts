@@ -1,6 +1,6 @@
 import { v4 as uuid } from 'uuid'
 import { getDatabase, saveDatabase } from '../connection'
-import type { Note } from '../../types'
+import type { Note, NoteSummary } from '../../types'
 import { getAuthSession } from '../../secure-store'
 
 const LOCAL_NOTE_SCOPE = '__local__'
@@ -10,16 +10,34 @@ export class NotesRepository {
     return getAuthSession()?.userId ?? LOCAL_NOTE_SCOPE
   }
 
-  getAll(): Note[] {
+  getSummaries(query?: string): NoteSummary[] {
     const scope = this.getCurrentScope()
     const db = getDatabase()
-    const stmt = db.prepare(
-      `SELECT * FROM notes WHERE deleted_at IS NULL AND owner_user_id = ? ORDER BY updated_at DESC`
-    )
-    stmt.bind([scope])
-    const results: Note[] = []
+    const normalizedQuery = query?.trim()
+    const summarySql = normalizedQuery
+      ? `SELECT id, title, SUBSTR(content, 1, 240) AS preview, created_at, updated_at, deleted_at, sync_version, is_dirty
+         FROM notes
+         WHERE deleted_at IS NULL
+           AND owner_user_id = ?
+           AND (title LIKE ? OR content LIKE ?)
+         ORDER BY updated_at DESC
+         LIMIT 50`
+      : `SELECT id, title, SUBSTR(content, 1, 240) AS preview, created_at, updated_at, deleted_at, sync_version, is_dirty
+         FROM notes
+         WHERE deleted_at IS NULL AND owner_user_id = ?
+         ORDER BY updated_at DESC`
+
+    const stmt = db.prepare(summarySql)
+    if (normalizedQuery) {
+      const pattern = `%${normalizedQuery}%`
+      stmt.bind([scope, pattern, pattern])
+    } else {
+      stmt.bind([scope])
+    }
+
+    const results: NoteSummary[] = []
     while (stmt.step()) {
-      results.push(stmt.getAsObject() as unknown as Note)
+      results.push(stmt.getAsObject() as unknown as NoteSummary)
     }
     stmt.free()
     return results
@@ -49,7 +67,8 @@ export class NotesRepository {
     const content = data.content ?? ''
 
     db.run(
-      `INSERT INTO notes (id, owner_user_id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO notes (id, owner_user_id, title, content, created_at, updated_at, sync_version, is_dirty, last_synced_version)
+       VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0)`,
       [id, scope, title, content, now, now]
     )
     saveDatabase()
@@ -82,35 +101,25 @@ export class NotesRepository {
   delete(id: string): boolean {
     const db = getDatabase()
     const now = new Date().toISOString()
+    const note = this.getById(id)
+
+    if (!note) return false
+
+    if ((note.sync_version ?? 0) === 0 && (note.last_synced_version ?? 0) === 0) {
+      db.run(
+        `DELETE FROM notes WHERE id = ? AND owner_user_id = ?`,
+        [id, this.getCurrentScope()]
+      )
+      saveDatabase()
+      return db.getRowsModified() > 0
+    }
+
     db.run(
       `UPDATE notes SET deleted_at = ?, is_dirty = 1 WHERE id = ? AND owner_user_id = ?`,
       [now, id, this.getCurrentScope()]
     )
     saveDatabase()
     return db.getRowsModified() > 0
-  }
-
-  search(query: string): Note[] {
-    if (!query.trim()) return this.getAll()
-
-    const scope = this.getCurrentScope()
-    const db = getDatabase()
-    const pattern = `%${query}%`
-    const stmt = db.prepare(
-      `SELECT * FROM notes
-       WHERE deleted_at IS NULL
-         AND owner_user_id = ?
-         AND (title LIKE ? OR content LIKE ?)
-       ORDER BY updated_at DESC
-       LIMIT 50`
-    )
-    stmt.bind([scope, pattern, pattern])
-    const results: Note[] = []
-    while (stmt.step()) {
-      results.push(stmt.getAsObject() as unknown as Note)
-    }
-    stmt.free()
-    return results
   }
 
   getDirty(): Note[] {

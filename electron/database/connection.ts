@@ -96,16 +96,6 @@ function runMigrations(db: Database) {
 
   db.run(`CREATE INDEX IF NOT EXISTS idx_notes_owner_user_id ON notes(owner_user_id);`)
 
-  db.run(`
-    UPDATE notes
-    SET
-      last_synced_title = title,
-      last_synced_content = content,
-      last_synced_deleted_at = deleted_at,
-      last_synced_version = COALESCE(sync_version, 0)
-    WHERE is_dirty = 0 AND COALESCE(sync_version, 0) > 0 AND COALESCE(last_synced_version, 0) = 0;
-  `)
-
   const currentUserId = getAuthSession()?.userId
   if (currentUserId) {
     db.run(

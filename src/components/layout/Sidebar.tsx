@@ -8,7 +8,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Avatar, Button, Empty, Input, Typography } from 'antd'
-import { useCallback, useDeferredValue, useMemo } from 'react'
+import { useCallback, useDeferredValue, useEffect } from 'react'
 import { useNoteStore } from '../../stores/noteStore'
 
 interface SidebarProps {
@@ -41,10 +41,6 @@ function getPreview(content: string) {
   return text.substring(0, 96) || '空白页，适合开始新的想法。'
 }
 
-function getSearchableText(note: { title: string; content: string }) {
-  return `${note.title} ${note.content.replace(/<[^>]*>/g, ' ').replace(/[{}[\]"]/g, ' ')}`.toLowerCase()
-}
-
 function getWorkspaceName(userEmail: string | null, userId: string | null) {
   if (userEmail) {
     const localName = userEmail.split('@')[0]?.replace(/[._-]+/g, ' ').trim()
@@ -58,6 +54,18 @@ function getAvatarText(userEmail: string | null, userId: string | null) {
   const seed = (userEmail?.split('@')[0] ?? userId ?? '').trim()
   const readableChar = Array.from(seed).find((char) => /[A-Za-z\u4e00-\u9fa5]/.test(char))
   return readableChar ? readableChar.toUpperCase() : null
+}
+
+function getNoteStatusLabel(note: { is_dirty: number; sync_version: number }, isAuthenticated: boolean) {
+  if (note.is_dirty) {
+    return '未同步'
+  }
+
+  if (!isAuthenticated || note.sync_version === 0) {
+    return '本地草稿'
+  }
+
+  return '已同步'
 }
 
 export function Sidebar({ onShowAuth }: SidebarProps) {
@@ -75,19 +83,18 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
   const syncAllStatus = useNoteStore((s) => s.syncAllStatus)
   const syncToCloud = useNoteStore((s) => s.syncToCloud)
   const logout = useNoteStore((s) => s.logout)
+  const loadNotes = useNoteStore((s) => s.loadNotes)
   const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase())
 
   const handleCreateNote = useCallback(async () => {
     await createNote()
   }, [createNote])
 
-  const visibleNotes = useMemo(() => {
-    if (!deferredSearchQuery) {
-      return notes
-    }
+  useEffect(() => {
+    void loadNotes()
+  }, [deferredSearchQuery, loadNotes])
 
-    return notes.filter((note) => getSearchableText(note).includes(deferredSearchQuery))
-  }, [notes, deferredSearchQuery])
+  const visibleNotes = notes
 
   const dirtyCount = notes.filter((note) => note.is_dirty).length
   const isReauthRequired = syncStatus === 'reauth-required'
@@ -255,12 +262,12 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
                   {note.title || '无标题'}
                 </Typography.Text>
                 <span className={`note-status ${note.is_dirty ? 'note-status--dirty' : ''}`}>
-                  {note.is_dirty ? '未同步' : '已同步'}
+                  {getNoteStatusLabel(note, isAuthenticated)}
                 </span>
               </div>
 
               <Typography.Paragraph className="note-preview" ellipsis={{ rows: 2 }}>
-                {getPreview(note.content)}
+                {getPreview(note.preview)}
               </Typography.Paragraph>
 
               <div className="note-list-item__foot">

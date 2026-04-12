@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Headers, Post, Query, Res, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { ok } from '../common/http/api-response';
 
 @Controller('auth')
 export class AuthController {
@@ -7,12 +8,12 @@ export class AuthController {
 
   @Post('register')
   async register(@Body() body: { email: string; password: string }) {
-    return this.authService.register(body.email, body.password);
+    return ok(await this.authService.register(body.email, body.password), '注册成功');
   }
 
   @Post('login')
   async login(@Body() body: { email: string; password: string }) {
-    return this.authService.login(body.email, body.password);
+    return ok(await this.authService.login(body.email, body.password), '登录成功');
   }
 
   @Post('sync-key')
@@ -26,7 +27,10 @@ export class AuthController {
 
     const token = auth.slice(7);
     const { userId, authMethod } = await this.authService.validateToken(token);
-    return this.authService.ensureSyncKeyVerifier(userId, body.keyVerifier, authMethod);
+    return ok(
+      await this.authService.ensureSyncKeyVerifier(userId, body.keyVerifier, authMethod),
+      '同步密钥校验成功',
+    );
   }
 
   @Get('google/start')

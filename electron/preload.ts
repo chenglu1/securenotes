@@ -11,14 +11,13 @@ export interface GoogleAuthResult {
 // Type-safe API exposed to the renderer process
 const api = {
   // ── Notes ──────────────────────────────────────────────
-  getNotes: () => ipcRenderer.invoke('notes:getAll'),
+  getNoteSummaries: (query?: string) => ipcRenderer.invoke('notes:listSummaries', query),
   getNote: (id: string) => ipcRenderer.invoke('notes:getById', id),
   createNote: (data: { title?: string; content?: string }) =>
     ipcRenderer.invoke('notes:create', data),
   updateNote: (id: string, data: { title?: string; content?: string }) =>
     ipcRenderer.invoke('notes:update', id, data),
   deleteNote: (id: string) => ipcRenderer.invoke('notes:delete', id),
-  searchNotes: (query: string) => ipcRenderer.invoke('notes:search', query),
   getDirtyNotes: () => ipcRenderer.invoke('notes:getDirty'),
   markNoteSynced: (id: string, syncVersion: number) =>
     ipcRenderer.invoke('notes:markSynced', id, syncVersion),

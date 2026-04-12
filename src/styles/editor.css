@@ -61,7 +61,7 @@
   padding: 0 !important;
   color: #37352f !important;
   font-family: var(--font-display);
-  font-size: 58px;
+  font-size: 52px;
   font-weight: 700;
   line-height: 1.08;
   letter-spacing: -0.055em;
@@ -279,7 +279,7 @@
 
 @media (max-width: 720px) {
   .editor-body {
-    padding-left: 18px;
+    font-size: 32px;
     padding-right: 18px;
   }
 
