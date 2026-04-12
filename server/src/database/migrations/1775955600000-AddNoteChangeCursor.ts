@@ -37,7 +37,7 @@ export class AddNoteChangeCursor1775955600000 implements MigrationInterface {
         FROM notes
         GROUP BY "userId"
       ) AS source
-      WHERE users.id = source."userId"
+      WHERE users.id::text = source."userId"
     `);
   }
 
