@@ -66,6 +66,10 @@ const api = {
   saveEncryptionKey: (userId: string, key: string) =>
     ipcRenderer.invoke('auth:saveEncryptionKey', userId, key),
   clearEncryptionKey: (userId: string) => ipcRenderer.invoke('auth:clearEncryptionKey', userId),
+  getNoteSyncCursor: (userId: string) => ipcRenderer.invoke('auth:getNoteSyncCursor', userId),
+  saveNoteSyncCursor: (userId: string, cursor: number) =>
+    ipcRenderer.invoke('auth:saveNoteSyncCursor', userId, cursor),
+  clearNoteSyncCursor: (userId: string) => ipcRenderer.invoke('auth:clearNoteSyncCursor', userId),
 
   // ── App Events ─────────────────────────────────────────
   onMainProcessMessage: (callback: (message: string) => void) => {

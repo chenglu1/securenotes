@@ -6,10 +6,13 @@ import { AttachmentsRepository } from './database/repositories/attachments'
 import {
   clearAuthSession,
   clearEncryptionKey,
+  clearNoteSyncCursor,
   getAuthSession,
   getEncryptionKey,
+  getNoteSyncCursor,
   saveAuthSession,
   saveEncryptionKey,
+  saveNoteSyncCursor,
 } from './secure-store'
 import { startGoogleAuth } from './google-auth'
 
@@ -66,6 +69,13 @@ export async function registerIpcHandlers(win: BrowserWindow | null) {
   })
   ipcMain.handle('auth:clearEncryptionKey', (_e, userId: string) => {
     clearEncryptionKey(userId)
+  })
+  ipcMain.handle('auth:getNoteSyncCursor', (_e, userId: string) => getNoteSyncCursor(userId))
+  ipcMain.handle('auth:saveNoteSyncCursor', (_e, userId: string, cursor: number) => {
+    saveNoteSyncCursor(userId, cursor)
+  })
+  ipcMain.handle('auth:clearNoteSyncCursor', (_e, userId: string) => {
+    clearNoteSyncCursor(userId)
   })
 
   // ── Notes ──────────────────────────────────────────────

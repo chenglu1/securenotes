@@ -8,7 +8,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Avatar, Button, Empty, Input, Typography } from 'antd'
-import { useCallback, useDeferredValue, useEffect } from 'react'
+import { useCallback, useDeferredValue, useEffect, useRef } from 'react'
 import { useNoteStore } from '../../stores/noteStore'
 
 interface SidebarProps {
@@ -85,12 +85,18 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
   const logout = useNoteStore((s) => s.logout)
   const loadNotes = useNoteStore((s) => s.loadNotes)
   const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase())
+  const hasHydratedSearch = useRef(false)
 
   const handleCreateNote = useCallback(async () => {
     await createNote()
   }, [createNote])
 
   useEffect(() => {
+    if (!hasHydratedSearch.current) {
+      hasHydratedSearch.current = true
+      return
+    }
+
     void loadNotes()
   }, [deferredSearchQuery, loadNotes])
 

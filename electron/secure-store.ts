@@ -11,6 +11,7 @@ interface AuthSession {
 interface SecureStorePayload {
   authSession: AuthSession | null;
   encryptionKeys: Record<string, string>;
+  noteSyncCursors: Record<string, number>;
 }
 
 const ENCRYPTED_STORE_FILE = 'secure-store.bin';
@@ -20,6 +21,7 @@ function getEmptyPayload(): SecureStorePayload {
   return {
     authSession: null,
     encryptionKeys: {},
+    noteSyncCursors: {},
   };
 }
 
@@ -115,5 +117,21 @@ export function saveEncryptionKey(userId: string, key: string): void {
 export function clearEncryptionKey(userId: string): void {
   const payload = readPayload();
   delete payload.encryptionKeys[userId];
+  writePayload(payload);
+}
+
+export function getNoteSyncCursor(userId: string): number {
+  return readPayload().noteSyncCursors[userId] ?? 0;
+}
+
+export function saveNoteSyncCursor(userId: string, cursor: number): void {
+  const payload = readPayload();
+  payload.noteSyncCursors[userId] = cursor;
+  writePayload(payload);
+}
+
+export function clearNoteSyncCursor(userId: string): void {
+  const payload = readPayload();
+  delete payload.noteSyncCursors[userId];
   writePayload(payload);
 }

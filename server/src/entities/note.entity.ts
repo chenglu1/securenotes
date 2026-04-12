@@ -20,6 +20,9 @@ export class Note {
   @Column({ default: 0 })
   syncVersion!: number;
 
+  @Column({ default: 0 })
+  changeVersion!: number;
+
   @CreateDateColumn()
   createdAt!: Date;
 

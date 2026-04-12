@@ -64,12 +64,15 @@ export class SyncController {
     @Headers('authorization') auth?: string,
   ) {
     const userId = await this.getUserId(auth);
-    const latestVersion = parseInt(sinceVersion) || 0;
-    const result = await this.syncService.listNoteChanges(userId, latestVersion);
+    const sinceChangeVersion = parseInt(sinceVersion, 10);
+    const result = await this.syncService.listNoteChanges(
+      userId,
+      Number.isFinite(sinceChangeVersion) && sinceChangeVersion > 0 ? sinceChangeVersion : 0,
+    );
     return ok(
       {
         items: result.notes,
-        latestVersion: result.latestVersion,
+        latestChangeVersion: result.latestChangeVersion,
       },
       '获取笔记增量成功',
     );

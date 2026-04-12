@@ -51,6 +51,7 @@ interface CloudNote {
   encryptedTitle: string
   encryptedContent: string
   syncVersion: number
+  changeVersion?: number
   createdAt: string
   updatedAt: string
   deletedAt?: string | null
@@ -68,7 +69,7 @@ interface NoteConflictResponse {
 
 interface CloudNoteChangesResponse {
   items: CloudNote[]
-  latestVersion: number
+  latestChangeVersion: number
 }
 
 type EditorFlushHandler = () => Promise<void>
@@ -76,6 +77,7 @@ type SyncStatus = 'idle' | 'reauth-required'
 type SyncActionStatus = 'idle' | 'syncing' | 'success' | 'error'
 
 let noteSelectionRequestVersion = 0
+let pullFromCloudPromise: Promise<void> | null = null
 
 type PushNoteResult =
   | { status: 'success'; note: CloudNote }
@@ -119,8 +121,27 @@ function buildConflictCopyTitle(title: string): string {
   return baseTitle.endsWith('（冲突副本）') ? baseTitle : `${baseTitle}（冲突副本）`
 }
 
-async function fetchCloudNoteChangesResponse(token: string): Promise<Response> {
-  return fetch(apiUrl('/notes/changes?sinceVersion=0'), {
+async function getStoredNoteSyncCursor(userId: string): Promise<number> {
+  const cursor = await window.api.getNoteSyncCursor(userId)
+  return typeof cursor === 'number' && Number.isFinite(cursor) && cursor > 0 ? cursor : 0
+}
+
+async function saveStoredNoteSyncCursor(userId: string, cursor: number): Promise<void> {
+  if (!Number.isFinite(cursor) || cursor < 0) {
+    return
+  }
+
+  await window.api.saveNoteSyncCursor(userId, cursor)
+}
+
+function getCloudNoteChangeVersion(note: CloudNote): number | null {
+  return typeof note.changeVersion === 'number' && Number.isFinite(note.changeVersion)
+    ? note.changeVersion
+    : null
+}
+
+async function fetchCloudNoteChangesResponse(token: string, sinceChangeVersion: number): Promise<Response> {
+  return fetch(apiUrl(`/notes/changes?sinceVersion=${sinceChangeVersion}`), {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -137,8 +158,8 @@ async function pushCloudNoteResponse(
   return fetch(apiUrl(`/notes/${note.id}`), {
     method: 'PUT',
     headers: {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
       encryptedTitle,
@@ -938,69 +959,109 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       throw new Error('请重新登录以恢复同步')
     }
 
-    try {
-      console.log('⬇️ Pulling notes from cloud...')
-      
-      // 获取云端所有笔记
-      const response = await fetchCloudNoteChangesResponse(token)
+    if (!userId) {
+      await clearAuthForReauth(null)
+      set({
+        notes: [],
+        selectedNoteId: null,
+        selectedNote: null,
+        activeEditorNoteId: null,
+        activeEditorFlush: null,
+        isAuthenticated: false,
+        userId: null,
+        userEmail: null,
+        token: null,
+        encryptionKey: null,
+        pendingGoogleAuth: null,
+        syncStatus: 'reauth-required',
+        syncAllStatus: 'idle',
+        syncCurrentStatus: 'idle',
+      })
+      throw new Error('当前登录态缺少用户标识，请重新登录。')
+    }
 
-      if (response.status === 401 || response.status === 403) {
-        await clearAuthForReauth(userId)
-        set({
-          notes: [],
-          selectedNoteId: null,
-          selectedNote: null,
-          activeEditorNoteId: null,
-          activeEditorFlush: null,
-          isAuthenticated: false,
-          userId: null,
-          userEmail: null,
-          token: null,
-          encryptionKey: null,
-          pendingGoogleAuth: null,
-          syncStatus: 'reauth-required',
-          syncAllStatus: 'idle',
-          syncCurrentStatus: 'idle',
-        })
-        throw new Error('当前登录态属于其他后端环境，请重新登录。')
-      }
+    if (pullFromCloudPromise) {
+      return pullFromCloudPromise
+    }
 
-      const payload = await readJson<ApiResponse<CloudNoteChangesResponse>>(response)
-      const cloudNotes = unwrapApiResponse(payload)?.items ?? null
+    pullFromCloudPromise = (async () => {
+      try {
+        const sinceChangeVersion = await getStoredNoteSyncCursor(userId)
+        console.log(`⬇️ Pulling notes from cloud since change version ${sinceChangeVersion}...`)
 
-      if (!response.ok || !Array.isArray(cloudNotes)) {
-        throw new Error(getErrorMessage(payload, 'Failed to fetch cloud notes'))
-      }
+        const response = await fetchCloudNoteChangesResponse(token, sinceChangeVersion)
 
-      console.log(`📥 Received ${cloudNotes.length} notes from cloud`)
-
-      // 将云端笔记同步到本地
-      for (const cloudNote of cloudNotes) {
-        try {
-          await applyCloudNoteToLocal(cloudNote, encryptionKey)
-        } catch (decryptError) {
-          console.error(`❌ Failed to decrypt note ${cloudNote.id}:`, decryptError)
+        if (response.status === 401 || response.status === 403) {
+          await clearAuthForReauth(userId)
+          set({
+            notes: [],
+            selectedNoteId: null,
+            selectedNote: null,
+            activeEditorNoteId: null,
+            activeEditorFlush: null,
+            isAuthenticated: false,
+            userId: null,
+            userEmail: null,
+            token: null,
+            encryptionKey: null,
+            pendingGoogleAuth: null,
+            syncStatus: 'reauth-required',
+            syncAllStatus: 'idle',
+            syncCurrentStatus: 'idle',
+          })
+          throw new Error('当前登录态属于其他后端环境，请重新登录。')
         }
-      }
 
-      const { alignedCount, restoredCount } = await reconcileDirtyNotesWithCloud(cloudNotes, encryptionKey)
-      if (alignedCount > 0) {
-        console.warn(`ℹ️ Cleared ${alignedCount} false local dirty marks that already matched the cloud snapshot.`)
-      }
+        const payload = await readJson<ApiResponse<CloudNoteChangesResponse>>(response)
+        const changeData = unwrapApiResponse(payload)
+        const cloudNotes = changeData?.items ?? null
+        const latestChangeVersion =
+          typeof changeData?.latestChangeVersion === 'number' && Number.isFinite(changeData.latestChangeVersion)
+            ? changeData.latestChangeVersion
+            : null
 
-      if (restoredCount > 0) {
-        console.warn(`⚠️ Prevented ${restoredCount} hidden local deletions from overwriting cloud notes.`)
-      }
+        if (!response.ok || !Array.isArray(cloudNotes)) {
+          throw new Error(getErrorMessage(payload, 'Failed to fetch cloud notes'))
+        }
 
-      console.log('✅ Pull completed')
-    } catch (err) {
-      // 网络不可达（未启动同步服务器）时静默忽略，不影响本地功能
-      if (isFetchError(err)) {
-        console.warn('⚠️ Sync server not reachable, skipping pull.')
-        return
+        console.log(`📥 Received ${cloudNotes.length} notes from cloud`)
+
+        for (const cloudNote of cloudNotes) {
+          try {
+            await applyCloudNoteToLocal(cloudNote, encryptionKey)
+          } catch (decryptError) {
+            console.error(`❌ Failed to decrypt note ${cloudNote.id}:`, decryptError)
+          }
+        }
+
+        const { alignedCount, restoredCount } = await reconcileDirtyNotesWithCloud(cloudNotes, encryptionKey)
+        if (alignedCount > 0) {
+          console.warn(`ℹ️ Cleared ${alignedCount} false local dirty marks that already matched the cloud snapshot.`)
+        }
+
+        if (restoredCount > 0) {
+          console.warn(`⚠️ Prevented ${restoredCount} hidden local deletions from overwriting cloud notes.`)
+        }
+
+        if (latestChangeVersion !== null) {
+          await saveStoredNoteSyncCursor(userId, latestChangeVersion)
+        }
+
+        console.log('✅ Pull completed')
+      } catch (err) {
+        if (isFetchError(err)) {
+          console.warn('⚠️ Sync server not reachable, skipping pull.')
+          return
+        }
+        console.error('❌ Pull failed:', err)
+        throw err
       }
-      console.error('❌ Pull failed:', err)
-      throw err
+    })()
+
+    try {
+      await pullFromCloudPromise
+    } finally {
+      pullFromCloudPromise = null
     }
   },
 
@@ -1008,6 +1069,27 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     const { token, encryptionKey, userId } = get()
     if (!token || !encryptionKey) {
       await clearAuthForReauth(userId)
+      set({
+        notes: [],
+        selectedNoteId: null,
+        selectedNote: null,
+        activeEditorNoteId: null,
+        activeEditorFlush: null,
+        isAuthenticated: false,
+        userId: null,
+        userEmail: null,
+        token: null,
+        encryptionKey: null,
+        pendingGoogleAuth: null,
+        syncStatus: 'reauth-required',
+        syncAllStatus: 'idle',
+        syncCurrentStatus: 'idle',
+      })
+      return
+    }
+
+    if (!userId) {
+      await clearAuthForReauth(null)
       set({
         notes: [],
         selectedNoteId: null,
@@ -1054,12 +1136,21 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
           return
         }
 
+        const changeVersion = getCloudNoteChangeVersion(pushResult.note)
+        if (changeVersion !== null) {
+          await saveStoredNoteSyncCursor(userId, changeVersion)
+        }
+
         const resolution = await resolveSyncConflict(note, pushResult.note, token, encryptionKey)
         set({ syncCurrentStatus: resolution === 'failed' ? 'error' : 'success' })
       } else if (pushResult.status === 'error') {
         set({ syncCurrentStatus: 'error' })
       } else {
         await window.api.markNoteSynced(note.id, pushResult.note.syncVersion)
+        const changeVersion = getCloudNoteChangeVersion(pushResult.note)
+        if (changeVersion !== null) {
+          await saveStoredNoteSyncCursor(userId, changeVersion)
+        }
         set({ syncCurrentStatus: 'success' })
       }
 
@@ -1074,6 +1165,27 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     const { token, encryptionKey, userId } = get()
     if (!token || !encryptionKey) {
       await clearAuthForReauth(userId)
+      set({
+        notes: [],
+        selectedNoteId: null,
+        selectedNote: null,
+        activeEditorNoteId: null,
+        activeEditorFlush: null,
+        isAuthenticated: false,
+        userId: null,
+        userEmail: null,
+        token: null,
+        encryptionKey: null,
+        pendingGoogleAuth: null,
+        syncStatus: 'reauth-required',
+        syncAllStatus: 'idle',
+        syncCurrentStatus: 'idle',
+      })
+      return
+    }
+
+    if (!userId) {
+      await clearAuthForReauth(null)
       set({
         notes: [],
         selectedNoteId: null,
@@ -1121,6 +1233,11 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
               continue
             }
 
+            const changeVersion = getCloudNoteChangeVersion(pushResult.note)
+            if (changeVersion !== null) {
+              await saveStoredNoteSyncCursor(userId, changeVersion)
+            }
+
             const resolution = await resolveSyncConflict(note, pushResult.note, token, encryptionKey)
             if (resolution === 'failed') {
               console.warn(`⚠️ Failed to resolve sync conflict for note ${note.id}`)
@@ -1145,6 +1262,10 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
             
             // 使用专用的 markSynced 方法更新同步状态
             await window.api.markNoteSynced(note.id, pushResult.note.syncVersion)
+            const changeVersion = getCloudNoteChangeVersion(pushResult.note)
+            if (changeVersion !== null) {
+              await saveStoredNoteSyncCursor(userId, changeVersion)
+            }
             successCount++
           }
         } catch (err) {

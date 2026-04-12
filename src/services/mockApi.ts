@@ -43,6 +43,7 @@ const noteTags: Map<string, string[]> = new Map()
 const noop = () => {}
 let authSession: { token: string; userId: string; email?: string } | null = null
 const encryptionKeys = new Map<string, string>()
+const noteSyncCursors = new Map<string, number>()
 const LOCAL_NOTE_SCOPE = '__local__'
 
 function isPristineLocalDraft(note: Pick<StoredNote, 'title' | 'content' | 'created_at' | 'updated_at' | 'deleted_at' | 'sync_version' | 'last_synced_version'>) {
@@ -261,6 +262,13 @@ export const mockApi = {
   },
   clearEncryptionKey: async (userId: string) => {
     encryptionKeys.delete(userId)
+  },
+  getNoteSyncCursor: async (userId: string) => noteSyncCursors.get(userId) ?? 0,
+  saveNoteSyncCursor: async (userId: string, cursor: number) => {
+    noteSyncCursors.set(userId, cursor)
+  },
+  clearNoteSyncCursor: async (userId: string) => {
+    noteSyncCursors.delete(userId)
   },
   onMainProcessMessage: () => noop,
   onCreateNewNote: () => noop,

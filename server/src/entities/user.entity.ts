@@ -26,6 +26,9 @@ export class User {
   @Column({ type: 'text', nullable: true })
   keySalt!: string | null;
 
+  @Column({ default: 0 })
+  latestNoteChangeVersion!: number;
+
   @CreateDateColumn()
   createdAt!: Date;
 }

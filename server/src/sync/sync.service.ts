@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan, IsNull } from 'typeorm';
+import { DataSource, EntityManager, Repository, MoreThan, IsNull } from 'typeorm';
 import { Note } from '../entities/note.entity';
+import { User } from '../entities/user.entity';
 
 export interface NoteSummaryDto {
   id: string;
@@ -16,7 +17,25 @@ export interface NoteSummaryDto {
 export class SyncService {
   constructor(
     @InjectRepository(Note) private noteRepo: Repository<Note>,
+    @InjectRepository(User) private userRepo: Repository<User>,
+    private dataSource: DataSource,
   ) {}
+
+  private async allocateNextChangeVersion(manager: EntityManager, userId: string): Promise<number> {
+    const userRepo = manager.getRepository(User);
+    const user = await userRepo.findOne({
+      where: { id: userId },
+      lock: { mode: 'pessimistic_write' },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found.');
+    }
+
+    user.latestNoteChangeVersion = (user.latestNoteChangeVersion ?? 0) + 1;
+    await userRepo.save(user);
+    return user.latestNoteChangeVersion;
+  }
 
   /**
    * Push a note update from the client.
@@ -24,56 +43,65 @@ export class SyncService {
     * payloads, while the current Google plaintext mode uploads raw text.
    */
   async upsertNote(userId: string, noteData: UpsertNoteDto): Promise<UpsertNoteResult> {
-    let note = await this.noteRepo.findOne({
-      where: { id: noteData.id, userId },
-    });
+      return this.dataSource.transaction(async (manager) => {
+        const noteRepo = manager.getRepository(Note);
+        let note = await noteRepo.findOne({
+          where: { id: noteData.id, userId },
+          lock: { mode: 'pessimistic_write' },
+        });
 
-    if (note) {
-      // Update existing — the client must be based on the exact current server version.
-      if (noteData.syncVersion !== note.syncVersion) {
-        // Conflict: client and server are out of sync. Return server version for merge.
-        return { status: 'conflict', note };
-      }
-      note.encryptedTitle = noteData.encryptedTitle;
-      note.encryptedContent = noteData.encryptedContent;
-      note.yjsState = noteData.yjsState ? Buffer.from(noteData.yjsState) : null;
-      note.syncVersion = note.syncVersion + 1;
-      note.deletedAt = noteData.deletedAt ? new Date(noteData.deletedAt) : null;
-      const savedNote = await this.noteRepo.save(note);
-      return { status: 'updated', note: savedNote };
-    } else {
-      // Create new note
-      note = this.noteRepo.create({
-        id: noteData.id,
-        userId,
-        encryptedTitle: noteData.encryptedTitle,
-        encryptedContent: noteData.encryptedContent,
-        yjsState: noteData.yjsState ? Buffer.from(noteData.yjsState) : null,
-        syncVersion: 1,
-        deletedAt: noteData.deletedAt ? new Date(noteData.deletedAt) : null,
+        if (note) {
+          if (noteData.syncVersion !== note.syncVersion) {
+            return { status: 'conflict', note };
+          }
+
+          const nextChangeVersion = await this.allocateNextChangeVersion(manager, userId);
+          note.encryptedTitle = noteData.encryptedTitle;
+          note.encryptedContent = noteData.encryptedContent;
+          note.yjsState = noteData.yjsState ? Buffer.from(noteData.yjsState) : null;
+          note.syncVersion = note.syncVersion + 1;
+          note.changeVersion = nextChangeVersion;
+          note.deletedAt = noteData.deletedAt ? new Date(noteData.deletedAt) : null;
+          const savedNote = await noteRepo.save(note);
+          return { status: 'updated', note: savedNote };
+        }
+
+        const nextChangeVersion = await this.allocateNextChangeVersion(manager, userId);
+        note = noteRepo.create({
+          id: noteData.id,
+          userId,
+          encryptedTitle: noteData.encryptedTitle,
+          encryptedContent: noteData.encryptedContent,
+          yjsState: noteData.yjsState ? Buffer.from(noteData.yjsState) : null,
+          syncVersion: 1,
+          changeVersion: nextChangeVersion,
+          deletedAt: noteData.deletedAt ? new Date(noteData.deletedAt) : null,
+        });
+        const savedNote = await noteRepo.save(note);
+        return { status: 'created', note: savedNote };
       });
-      const savedNote = await this.noteRepo.save(note);
-      return { status: 'created', note: savedNote };
-    }
   }
 
   /**
-   * Pull notes updated since the given sync version
+     * Pull notes updated since the given global change version.
    */
-  async listNoteChanges(userId: string, sinceVersion: number): Promise<{ notes: Note[]; latestVersion: number }> {
+    async listNoteChanges(userId: string, sinceChangeVersion: number): Promise<{ notes: Note[]; latestChangeVersion: number }> {
     const notes = await this.noteRepo.find({
       where: {
         userId,
-        syncVersion: MoreThan(sinceVersion),
+          changeVersion: MoreThan(sinceChangeVersion),
       },
-      order: { syncVersion: 'ASC' },
+        order: { changeVersion: 'ASC' },
     });
 
-    const latestVersion = notes.length > 0
-      ? Math.max(...notes.map(n => n.syncVersion))
-      : sinceVersion;
+      const user = await this.userRepo.findOne({
+        where: { id: userId },
+        select: { latestNoteChangeVersion: true },
+      });
 
-    return { notes, latestVersion };
+      const latestChangeVersion = user?.latestNoteChangeVersion ?? sinceChangeVersion;
+
+      return { notes, latestChangeVersion };
   }
 
   /**
