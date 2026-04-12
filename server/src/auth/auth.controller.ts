@@ -1,11 +1,39 @@
-import { BadRequestException, Controller, Get, Query, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Post, Query, Res, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { ok } from '../common/http/api-response';
 
-@Controller('auth/google')
+@Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  @Get('start')
+  @Post('register')
+  async register(@Body() body: { email: string; password: string }) {
+    return ok(await this.authService.register(body.email, body.password), '注册成功');
+  }
+
+  @Post('login')
+  async login(@Body() body: { email: string; password: string }) {
+    return ok(await this.authService.login(body.email, body.password), '登录成功');
+  }
+
+  @Post('sync-key')
+  async ensureSyncKey(
+    @Body() body: { keyVerifier: string },
+    @Headers('authorization') auth?: string,
+  ) {
+    if (!auth?.startsWith('Bearer ')) {
+      throw new UnauthorizedException('Missing authorization');
+    }
+
+    const token = auth.slice(7);
+    const { userId, authMethod } = await this.authService.validateToken(token);
+    return ok(
+      await this.authService.ensureSyncKeyVerifier(userId, body.keyVerifier, authMethod),
+      '同步密钥校验成功',
+    );
+  }
+
+  @Get('google/start')
   googleStart(@Query('state') state: string, @Res() res: any) {
     if (!state?.trim()) {
       throw new BadRequestException('Missing OAuth state');
@@ -14,7 +42,7 @@ export class AuthController {
     return res.redirect(this.authService.getGoogleAuthorizationUrl(state));
   }
 
-  @Get('callback')
+  @Get('google/callback')
   async googleCallback(
     @Query('code') code: string | undefined,
     @Query('state') state: string | undefined,

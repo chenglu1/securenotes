@@ -176,8 +176,8 @@ function decodeJwtPayload(token: string): { email?: unknown; authMethod?: unknow
 
 async function ensureRemoteSyncKey(token: string, encryptionKey: string): Promise<void> {
   const keyVerifier = await createKeyVerifier(encryptionKey)
-  const response = await fetch(apiUrl('/users/me/sync-key-verifier'), {
-    method: 'PUT',
+  const response = await fetch(apiUrl('/auth/sync-key'), {
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
@@ -767,7 +767,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   login: async (email, password) => {
     try {
-      const response = await fetch(apiUrl('/sessions'), {
+      const response = await fetch(apiUrl('/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -796,7 +796,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   register: async (email, password) => {
     try {
-      const response = await fetch(apiUrl('/users'), {
+      const response = await fetch(apiUrl('/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
