@@ -203,37 +203,9 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
   return (
     <aside className="sidebar-panel">
       <div className="sidebar-identity-card">
-        <div className="sidebar-identity-card__head">
-          <div className="sidebar-identity-card__toolbar">
-            <span className={`sidebar-sync-badge sidebar-sync-badge--${syncTone}`}>
-              {syncLabel}
-            </span>
-
-            {isAuthenticated ? (
-              <Popconfirm
-                placement="bottomRight"
-                title="确认退出当前账号？"
-                description="本地笔记会保留，云同步将暂停。"
-                okText="退出"
-                cancelText="取消"
-                onConfirm={() => logout()}
-              >
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<LogoutOutlined />}
-                  className="sidebar-identity-card__action"
-                >
-                  退出
-                </Button>
-              </Popconfirm>
-            ) : null}
-          </div>
-        </div>
-
         <div className="sidebar-identity-card__body">
           <Avatar
-            size={46}
+            size={42}
             icon={avatarText ? undefined : <UserOutlined />}
             className={`workspace-avatar ${isAuthenticated ? 'is-live' : 'is-local'}`}
           >
@@ -241,10 +213,41 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
           </Avatar>
 
           <div className="sidebar-identity-card__copy">
-            <Typography.Title level={5} className="workspace-switcher__title">
-              {workspaceName}
-            </Typography.Title>
-            <Typography.Text className="workspace-switcher__meta">{accountHint}</Typography.Text>
+            <div className="sidebar-identity-card__title-row">
+              <Typography.Title level={5} className="workspace-switcher__title">
+                {workspaceName}
+              </Typography.Title>
+
+              {isAuthenticated ? (
+                <Popconfirm
+                  placement="bottomRight"
+                  title="确认退出当前账号？"
+                  description="本地笔记会保留，云同步将暂停。"
+                  okText="退出"
+                  cancelText="取消"
+                  onConfirm={() => logout()}
+                >
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<LogoutOutlined />}
+                    className="sidebar-identity-card__action"
+                  >
+                    退出
+                  </Button>
+                </Popconfirm>
+              ) : null}
+            </div>
+
+            <div className="sidebar-identity-card__meta-row">
+              <Typography.Text className="workspace-switcher__meta" ellipsis>
+                {accountHint}
+              </Typography.Text>
+
+              <span className={`sidebar-sync-badge sidebar-sync-badge--${syncTone}`}>
+                {syncLabel}
+              </span>
+            </div>
           </div>
         </div>
       </div>

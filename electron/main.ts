@@ -63,6 +63,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     icon: join(PUBLIC, 'icon.png'),
+    autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: '#0f0f13',
@@ -72,6 +73,10 @@ function createWindow() {
       preload,
     },
   })
+
+  if (process.platform !== 'darwin') {
+    win.removeMenu()
+  }
 
   // Open external links in browser
   win.webContents.setWindowOpenHandler(({ url }) => {
