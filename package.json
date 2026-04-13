@@ -41,7 +41,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.1",
-    "@chenglu1/xeditor-editor": "^0.0.9",
+    "@chenglu1/xeditor-editor": "^0.0.12",
     "antd": "^6.3.5",
     "libsodium-wrappers-sumo": "^0.8.2",
     "lucide-react": "^0.575.0",
