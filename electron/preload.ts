@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { NewsDigest, NewsSettingsInput, NewsSettingsView } from './news/types'
 
 export interface GoogleAuthResult {
   token: string
@@ -71,6 +72,14 @@ const api = {
     ipcRenderer.invoke('auth:saveNoteSyncCursor', userId, cursor),
   clearNoteSyncCursor: (userId: string) => ipcRenderer.invoke('auth:clearNoteSyncCursor', userId),
 
+  // ── News Digest ───────────────────────────────────────
+  getNewsSettings: (): Promise<NewsSettingsView | null> => ipcRenderer.invoke('news:getSettings'),
+  saveNewsSettings: (input: NewsSettingsInput): Promise<NewsSettingsView> =>
+    ipcRenderer.invoke('news:saveSettings', input),
+  getLatestNewsDigest: (): Promise<NewsDigest | null> => ipcRenderer.invoke('news:getLatestDigest'),
+  runNewsDigestNow: (): Promise<NewsDigest> => ipcRenderer.invoke('news:runNow'),
+  openNewsLogFile: (): Promise<void> => ipcRenderer.invoke('news:openLogFile'),
+
   // ── App Events ─────────────────────────────────────────
   onMainProcessMessage: (callback: (message: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, message: string) => callback(message)
@@ -84,6 +93,27 @@ const api = {
     ipcRenderer.on('create-new-note', listener)
     return () => {
       ipcRenderer.removeListener('create-new-note', listener)
+    }
+  },
+  onNewsDigestReady: (callback: (payload: { digestDate: string; trigger: 'manual' | 'scheduled' }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: { digestDate: string; trigger: 'manual' | 'scheduled' }) => callback(payload)
+    ipcRenderer.on('news:digest-ready', listener)
+    return () => {
+      ipcRenderer.removeListener('news:digest-ready', listener)
+    }
+  },
+  onOpenNewsDigest: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('news:open-digest', listener)
+    return () => {
+      ipcRenderer.removeListener('news:open-digest', listener)
+    }
+  },
+  onOpenNewsSettings: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('news:open-settings', listener)
+    return () => {
+      ipcRenderer.removeListener('news:open-settings', listener)
     }
   },
 }

@@ -7,8 +7,11 @@ import {
   LogoutOutlined,
   PlusOutlined,
   SearchOutlined,
+  SettingOutlined,
   SyncOutlined,
+  ThunderboltOutlined,
   UserOutlined,
+  NotificationOutlined,
 } from '@ant-design/icons'
 import { Avatar, Button, Empty, Input, Popconfirm, Popover, Typography } from 'antd'
 import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react'
@@ -17,6 +20,10 @@ import { useNoteStore } from '../../stores/noteStore'
 interface SidebarProps {
   onShowAuth: () => void
   onRequestClose?: () => void
+  onShowNewsDigest?: () => void
+  onShowNewsSettings?: () => void
+  onRunNewsDigest?: () => void
+  isNewsRunning?: boolean
 }
 
 function formatRelativeTime(dateStr: string) {
@@ -69,7 +76,14 @@ function shouldShowNoteStatus(note: { is_dirty: number; sync_version: number }, 
   return note.is_dirty || !isAuthenticated || note.sync_version === 0
 }
 
-export function Sidebar({ onShowAuth, onRequestClose }: SidebarProps) {
+export function Sidebar({
+  onShowAuth,
+  onRequestClose,
+  onShowNewsDigest,
+  onShowNewsSettings,
+  onRunNewsDigest,
+  isNewsRunning = false,
+}: SidebarProps) {
   const notes = useNoteStore((s) => s.notes)
   const selectedNoteId = useNoteStore((s) => s.selectedNoteId)
   const searchQuery = useNoteStore((s) => s.searchQuery)
@@ -108,6 +122,21 @@ export function Sidebar({ onShowAuth, onRequestClose }: SidebarProps) {
     onShowAuth()
     onRequestClose?.()
   }, [onRequestClose, onShowAuth])
+
+  const handleShowNewsDigest = useCallback(() => {
+    onShowNewsDigest?.()
+    onRequestClose?.()
+  }, [onRequestClose, onShowNewsDigest])
+
+  const handleShowNewsSettings = useCallback(() => {
+    onShowNewsSettings?.()
+    onRequestClose?.()
+  }, [onRequestClose, onShowNewsSettings])
+
+  const handleRunNewsDigest = useCallback(() => {
+    onRunNewsDigest?.()
+    onRequestClose?.()
+  }, [onRequestClose, onRunNewsDigest])
 
   const startTitleEdit = useCallback((noteId: string, title: string) => {
     setOpenMenuNoteId(null)
@@ -304,6 +333,18 @@ export function Sidebar({ onShowAuth, onRequestClose }: SidebarProps) {
             {isReauthRequired ? '重新登录' : '登录'}
           </Button>
         )}
+      </div>
+
+      <div className="sidebar-news-actions">
+        <Button icon={<NotificationOutlined />} onClick={handleShowNewsDigest}>
+          今日热点
+        </Button>
+        <Button icon={<ThunderboltOutlined />} loading={isNewsRunning} onClick={handleRunNewsDigest}>
+          立即抓取
+        </Button>
+        <Button icon={<SettingOutlined />} onClick={handleShowNewsSettings}>
+          提醒设置
+        </Button>
       </div>
 
       <div className="list-heading list-heading--simple">

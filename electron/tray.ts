@@ -3,11 +3,17 @@ import { join } from 'path'
 
 let tray: Tray | null = null
 
+interface TrayActionHandlers {
+  onRunNewsDigest?: () => void
+  onShowNewsDigest?: () => void
+  onShowNewsSettings?: () => void
+}
+
 /**
  * 创建系统托盘
  * @param win - 主窗口实例
  */
-export function createTray(win: BrowserWindow | null) {
+export function createTray(win: BrowserWindow | null, actions?: TrayActionHandlers) {
   if (!win) return
 
   // 获取托盘图标路径
@@ -40,6 +46,30 @@ export function createTray(win: BrowserWindow | null) {
         showWindow(win)
         // 可以通过 IPC 通知渲染进程创建笔记
         win?.webContents.send('create-new-note')
+      },
+    },
+    {
+      type: 'separator',
+    },
+    {
+      label: '立即抓取财经热点',
+      click: () => {
+        showWindow(win)
+        actions?.onRunNewsDigest?.()
+      },
+    },
+    {
+      label: '查看今日热点',
+      click: () => {
+        showWindow(win)
+        actions?.onShowNewsDigest?.()
+      },
+    },
+    {
+      label: '新闻提醒设置',
+      click: () => {
+        showWindow(win)
+        actions?.onShowNewsSettings?.()
       },
     },
     {

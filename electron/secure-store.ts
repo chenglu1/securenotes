@@ -12,6 +12,7 @@ interface SecureStorePayload {
   authSession: AuthSession | null;
   encryptionKeys: Record<string, string>;
   noteSyncCursors: Record<string, number>;
+  newsApiKeys: Record<string, string>;
 }
 
 const ENCRYPTED_STORE_FILE = 'secure-store.bin';
@@ -22,6 +23,7 @@ function getEmptyPayload(): SecureStorePayload {
     authSession: null,
     encryptionKeys: {},
     noteSyncCursors: {},
+    newsApiKeys: {},
   };
 }
 
@@ -133,5 +135,21 @@ export function saveNoteSyncCursor(userId: string, cursor: number): void {
 export function clearNoteSyncCursor(userId: string): void {
   const payload = readPayload();
   delete payload.noteSyncCursors[userId];
+  writePayload(payload);
+}
+
+export function getNewsApiKey(provider: string): string | null {
+  return readPayload().newsApiKeys[provider] ?? null;
+}
+
+export function saveNewsApiKey(provider: string, apiKey: string): void {
+  const payload = readPayload();
+  payload.newsApiKeys[provider] = apiKey;
+  writePayload(payload);
+}
+
+export function clearNewsApiKey(provider: string): void {
+  const payload = readPayload();
+  delete payload.newsApiKeys[provider];
   writePayload(payload);
 }

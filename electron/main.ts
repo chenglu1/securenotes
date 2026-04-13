@@ -4,6 +4,7 @@ import { join, resolve } from 'path'
 import { app, BrowserWindow, shell } from 'electron'
 import { APP_PROTOCOL, handleGoogleAuthCallback } from './google-auth'
 import { createTray, destroyTray } from './tray'
+import { NewsDigestService } from './news/service'
 
 const CANONICAL_USER_DATA_DIR = 'securenotes'
 const LEGACY_USER_DATA_DIRS = ['electron-vite-boilerplate']
@@ -42,6 +43,7 @@ const DIST = join(__dirname, '../dist')
 
 let win: BrowserWindow | null
 let isQuitting = false
+let newsDigestService: NewsDigestService | null = null
 const preload = join(__dirname, './preload.js')
 const url = process.env['VITE_DEV_SERVER_URL']
 const initialDeepLink = process.argv.find((arg) => arg.startsWith(`${APP_PROTOCOL}://`)) ?? null
@@ -150,15 +152,29 @@ if (gotTheLock) {
   app.whenReady().then(async () => {
     createWindow()
 
+    newsDigestService = new NewsDigestService(() => win)
+
     const { registerIpcHandlers } = await import('./ipc-handlers')
-    await registerIpcHandlers(win)
+    await registerIpcHandlers(win, newsDigestService)
+
+    newsDigestService.initialize()
 
     if (initialDeepLink) {
       handleGoogleAuthCallback(initialDeepLink)
     }
 
     // 创建系统托盘
-    createTray(win)
+    createTray(win, {
+      onRunNewsDigest: () => {
+        void newsDigestService?.runNow('manual')
+      },
+      onShowNewsDigest: () => {
+        newsDigestService?.openDigest()
+      },
+      onShowNewsSettings: () => {
+        newsDigestService?.openSettings()
+      },
+    })
   })
 }
 
@@ -176,5 +192,6 @@ app.on('activate', () => {
 // 应用退出前清理托盘
 app.on('before-quit', () => {
   isQuitting = true
+  newsDigestService?.dispose()
   destroyTray()
 })

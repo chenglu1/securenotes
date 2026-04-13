@@ -3,6 +3,7 @@ import { initDatabase } from './database/connection'
 import { NotesRepository } from './database/repositories/notes'
 import { TagsRepository } from './database/repositories/tags'
 import { AttachmentsRepository } from './database/repositories/attachments'
+import type { NewsDigestService } from './news/service'
 import {
   clearAuthSession,
   clearEncryptionKey,
@@ -20,7 +21,7 @@ const notes = new NotesRepository()
 const tags = new TagsRepository()
 const attachments = new AttachmentsRepository()
 
-export async function registerIpcHandlers(win: BrowserWindow | null) {
+export async function registerIpcHandlers(win: BrowserWindow | null, newsService?: NewsDigestService) {
   // Initialize database first (async for sql.js WASM loading)
   await initDatabase()
 
@@ -76,6 +77,31 @@ export async function registerIpcHandlers(win: BrowserWindow | null) {
   })
   ipcMain.handle('auth:clearNoteSyncCursor', (_e, userId: string) => {
     clearNoteSyncCursor(userId)
+  })
+
+  // ── News Digest ───────────────────────────────────────
+  ipcMain.handle('news:getSettings', () => newsService?.getSettings() ?? null)
+  ipcMain.handle('news:saveSettings', (_e, input) => {
+    if (!newsService) {
+      throw new Error('News digest service is not available.')
+    }
+
+    return newsService.saveSettings(input)
+  })
+  ipcMain.handle('news:getLatestDigest', () => newsService?.getLatestDigest() ?? null)
+  ipcMain.handle('news:runNow', () => {
+    if (!newsService) {
+      throw new Error('News digest service is not available.')
+    }
+
+    return newsService.runNow('manual')
+  })
+  ipcMain.handle('news:openLogFile', () => {
+    if (!newsService) {
+      throw new Error('News digest service is not available.')
+    }
+
+    return newsService.openLogFile()
   })
 
   // ── Notes ──────────────────────────────────────────────

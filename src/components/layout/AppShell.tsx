@@ -6,6 +6,10 @@ import { EditorPane } from '../editor/EditorPane'
 
 interface AppShellProps {
   onShowAuth: () => void
+  onShowNewsDigest: () => void
+  onShowNewsSettings: () => void
+  onRunNewsDigest: () => void
+  isNewsRunning: boolean
 }
 
 const { Sider, Content } = Layout
@@ -19,7 +23,7 @@ function getInitialCompactLayout() {
   return window.matchMedia(COMPACT_LAYOUT_QUERY).matches
 }
 
-export function AppShell({ onShowAuth }: AppShellProps) {
+export function AppShell({ onShowAuth, onShowNewsDigest, onShowNewsSettings, onRunNewsDigest, isNewsRunning }: AppShellProps) {
   const [isCompactLayout, setIsCompactLayout] = useState(getInitialCompactLayout)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
@@ -68,7 +72,13 @@ export function AppShell({ onShowAuth }: AppShellProps) {
         <Layout className="shell-layout">
           {isCompactLayout ? null : (
             <Sider width="clamp(272px, 24vw, 312px)" className="shell-sider" theme="light">
-              <Sidebar onShowAuth={onShowAuth} />
+              <Sidebar
+                onShowAuth={onShowAuth}
+                onShowNewsDigest={onShowNewsDigest}
+                onShowNewsSettings={onShowNewsSettings}
+                onRunNewsDigest={onRunNewsDigest}
+                isNewsRunning={isNewsRunning}
+              />
             </Sider>
           )}
 
@@ -111,7 +121,14 @@ export function AppShell({ onShowAuth }: AppShellProps) {
                 </Button>
               </div>
 
-              <Sidebar onShowAuth={onShowAuth} onRequestClose={() => setIsSidebarOpen(false)} />
+              <Sidebar
+                onShowAuth={onShowAuth}
+                onRequestClose={() => setIsSidebarOpen(false)}
+                onShowNewsDigest={onShowNewsDigest}
+                onShowNewsSettings={onShowNewsSettings}
+                onRunNewsDigest={onRunNewsDigest}
+                isNewsRunning={isNewsRunning}
+              />
             </aside>
           </div>
         ) : null}
