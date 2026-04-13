@@ -1,4 +1,4 @@
-export type NewsAnalysisProvider = 'openrouter'
+export type NewsAnalysisProvider = 'openrouter' | 'gemini'
 export type NewsRunStatus = 'idle' | 'running' | 'success' | 'error'
 
 export interface NewsSettings {
@@ -25,6 +25,7 @@ export interface NewsSettingsRecord extends NewsSettings, NewsRuntimeState {}
 
 export interface NewsSettingsView extends NewsSettingsRecord {
   apiKeyConfigured: boolean
+  apiKeyConfiguredByProvider: Record<NewsAnalysisProvider, boolean>
   logFilePath: string
 }
 

@@ -67,7 +67,7 @@ function mapSettingsRow(row: NewsSettingsRow): NewsSettingsRecord {
     enabled: row.enabled === 1,
     fetchTime: row.fetch_time,
     topN: row.top_n,
-    provider: row.provider === 'openrouter' ? 'openrouter' : 'openrouter',
+    provider: row.provider === 'gemini' ? 'gemini' : 'openrouter',
     model: row.model === LEGACY_DEFAULT_MODEL ? DEFAULT_SETTINGS.model : row.model,
     desktopNotificationsEnabled: row.desktop_notifications_enabled === 1,
     sources: parseSources(row.sources_json),

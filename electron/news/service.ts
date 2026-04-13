@@ -6,7 +6,15 @@ import { fetchFinanceNewsCandidates } from './fetchers'
 import { getNewsLogFilePath, openNewsLogFile, writeNewsLog } from './logger'
 import { showNewsDigestNotification } from './notifications'
 import { rankNewsCandidates } from './scoring'
-import type { NewsAnalysisItem, NewsDigest, NewsDigestItem, NewsSettings, NewsSettingsInput, NewsSettingsView, RankedNewsCandidate, NewsFetchSourceResult } from './types'
+import type { NewsAnalysisItem, NewsAnalysisProvider, NewsDigest, NewsDigestItem, NewsSettings, NewsSettingsInput, NewsSettingsView, RankedNewsCandidate, NewsFetchSourceResult } from './types'
+
+function getDefaultModelForProvider(provider: NewsAnalysisProvider): string {
+  if (provider === 'gemini') {
+    return 'gemini-2.5-flash'
+  }
+
+  return 'minimax/minimax-m2.5:free'
+}
 
 function pad(value: number): string {
   return String(value).padStart(2, '0')
@@ -185,9 +193,15 @@ export class NewsDigestService {
 
   getSettings(): NewsSettingsView {
     const settings = this.repository.getSettings()
+    const apiKeyConfiguredByProvider: Record<NewsAnalysisProvider, boolean> = {
+      openrouter: Boolean(getNewsApiKey('openrouter')),
+      gemini: Boolean(getNewsApiKey('gemini')),
+    }
+
     return {
       ...settings,
-      apiKeyConfigured: Boolean(getNewsApiKey(settings.provider)),
+      apiKeyConfigured: apiKeyConfiguredByProvider[settings.provider],
+      apiKeyConfiguredByProvider,
       logFilePath: getNewsLogFilePath(),
     }
   }
@@ -203,7 +217,7 @@ export class NewsDigestService {
       fetchTime: input.fetchTime,
       topN: input.topN,
       provider: input.provider,
-      model: input.model.trim() || 'minimax/minimax-m2.5:free',
+      model: input.model.trim() || getDefaultModelForProvider(input.provider),
       desktopNotificationsEnabled: input.desktopNotificationsEnabled,
       sources: input.sources,
     })
@@ -303,7 +317,7 @@ export class NewsDigestService {
     try {
     const apiKey = getNewsApiKey(settings.provider)
     if (!apiKey) {
-      throw new Error('请先在财经热点设置中配置 OpenRouter API Key。')
+      throw new Error(`请先在财经热点设置中配置${settings.provider === 'gemini' ? ' Gemini' : ' OpenRouter'} API Key。`)
     }
 
     const digestDate = formatLocalDate(new Date())

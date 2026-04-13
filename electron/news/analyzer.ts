@@ -3,12 +3,18 @@ import { buildFallbackNewsAnalysis } from './scoring'
 import type { NewsAnalysisItem, NewsAnalysisProvider, NewsAnalysisResult, RankedNewsCandidate } from './types'
 
 const DEFAULT_OPENROUTER_MODEL = 'minimax/minimax-m2.5:free'
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
 const OPENROUTER_FALLBACK_MODELS = [
   DEFAULT_OPENROUTER_MODEL,
   'z-ai/glm-4.5-air:free',
   'google/gemma-3-27b-it:free',
   'openai/gpt-oss-20b:free',
   'meta-llama/llama-3.3-70b-instruct:free',
+]
+const GEMINI_FALLBACK_MODELS = [
+  DEFAULT_GEMINI_MODEL,
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
 ]
 const MODEL_REQUEST_TIMEOUT_MS = 45_000
 const MAX_MODEL_REQUEST_ATTEMPTS = 2
@@ -32,6 +38,24 @@ interface OpenRouterChatCompletionResponse {
   }
 }
 
+interface GeminiGenerateContentResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string
+      }>
+    }
+    finishReason?: string
+  }>
+  promptFeedback?: {
+    blockReason?: string
+    blockReasonMessage?: string
+  }
+  error?: {
+    message?: string
+  }
+}
+
 class OpenRouterRequestError extends Error {
   constructor(
     message: string,
@@ -39,6 +63,16 @@ class OpenRouterRequestError extends Error {
   ) {
     super(message)
     this.name = 'OpenRouterRequestError'
+  }
+}
+
+class GeminiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message)
+    this.name = 'GeminiRequestError'
   }
 }
 
@@ -114,8 +148,23 @@ function extractMessageContent(content: string | Array<{ text?: string; type?: s
   return ''
 }
 
+function extractGeminiContent(parts: Array<{ text?: string }> | undefined): string {
+  if (!Array.isArray(parts)) {
+    return ''
+  }
+
+  return parts
+    .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+    .join('')
+    .trim()
+}
+
 function isRetryableError(error: unknown): boolean {
   if (error instanceof OpenRouterRequestError) {
+    return [408, 409, 425, 429, 500, 502, 503, 504].includes(error.status)
+  }
+
+  if (error instanceof GeminiRequestError) {
     return [408, 409, 425, 429, 500, 502, 503, 504].includes(error.status)
   }
 
@@ -228,6 +277,77 @@ async function analyzeWithOpenRouter(input: AnalyzeCandidatesInput): Promise<New
   return normalizeAnalysisItems(parsed)
 }
 
+async function analyzeWithGemini(input: AnalyzeCandidatesInput): Promise<NewsAnalysisItem[]> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), MODEL_REQUEST_TIMEOUT_MS)
+
+  let response: Response
+  try {
+    response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:generateContent?key=${encodeURIComponent(input.apiKey)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [
+              {
+                text: '你是一个严谨的财经新闻分析助手，必须输出严格 JSON。',
+              },
+            ],
+          },
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: buildPrompt(input.topN, input.candidates),
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: 'application/json',
+          },
+        }),
+        signal: controller.signal,
+      },
+    )
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new GeminiRequestError('Gemini request timed out.', 408)
+    }
+
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
+
+  const payload = (await response.json()) as GeminiGenerateContentResponse
+  if (!response.ok) {
+    throw new GeminiRequestError(
+      payload.error?.message || payload.promptFeedback?.blockReasonMessage || payload.promptFeedback?.blockReason || 'Gemini request failed.',
+      response.status,
+    )
+  }
+
+  if (payload.promptFeedback?.blockReason) {
+    throw new GeminiRequestError(payload.promptFeedback.blockReasonMessage || payload.promptFeedback.blockReason, 400)
+  }
+
+  const candidate = payload.candidates?.[0]
+  const content = extractGeminiContent(candidate?.content?.parts)
+  if (!content) {
+    throw new Error(`Gemini response is empty${candidate?.finishReason ? ` (${candidate.finishReason})` : ''}.`)
+  }
+
+  const parsed = JSON.parse(extractJsonObject(content)) as unknown
+  return normalizeAnalysisItems(parsed)
+}
+
 async function analyzeWithOpenRouterRetries(input: AnalyzeCandidatesInput): Promise<NewsAnalysisItem[]> {
   let lastError: unknown = null
 
@@ -256,30 +376,70 @@ async function analyzeWithOpenRouterRetries(input: AnalyzeCandidatesInput): Prom
   throw lastError instanceof Error ? lastError : new Error('OpenRouter request failed.')
 }
 
-function buildModelAttemptList(model: string): string[] {
-  const preferredModel = model.trim() || DEFAULT_OPENROUTER_MODEL
-  return [preferredModel, ...OPENROUTER_FALLBACK_MODELS].filter((value, index, list) => value && list.indexOf(value) === index)
+async function analyzeWithGeminiRetries(input: AnalyzeCandidatesInput): Promise<NewsAnalysisItem[]> {
+  let lastError: unknown = null
+
+  for (let attempt = 1; attempt <= MAX_MODEL_REQUEST_ATTEMPTS; attempt += 1) {
+    try {
+      return await analyzeWithGemini(input)
+    } catch (error) {
+      lastError = error
+      const retryable = isRetryableError(error)
+
+      writeNewsLog(retryable ? 'warn' : 'error', 'Gemini model attempt failed', {
+        model: input.model,
+        attempt,
+        retryable,
+        error: formatErrorMessage(error),
+      })
+
+      if (!retryable || attempt >= MAX_MODEL_REQUEST_ATTEMPTS) {
+        throw error
+      }
+
+      await delay(900 * attempt)
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Gemini request failed.')
+}
+
+function buildModelAttemptList(provider: NewsAnalysisProvider, model: string): string[] {
+  const defaultModel = provider === 'gemini' ? DEFAULT_GEMINI_MODEL : DEFAULT_OPENROUTER_MODEL
+  const fallbackModels = provider === 'gemini' ? GEMINI_FALLBACK_MODELS : OPENROUTER_FALLBACK_MODELS
+  const preferredModel = model.trim() || defaultModel
+  return [preferredModel, ...fallbackModels].filter((value, index, list) => value && list.indexOf(value) === index)
+}
+
+function getProviderDisplayName(provider: NewsAnalysisProvider): string {
+  return provider === 'gemini' ? 'Gemini' : 'OpenRouter'
 }
 
 export async function analyzeNewsCandidates(input: AnalyzeCandidatesInput): Promise<NewsAnalysisResult> {
-  if (input.provider !== 'openrouter') {
+  if (input.provider !== 'openrouter' && input.provider !== 'gemini') {
     throw new Error(`Unsupported news analysis provider: ${input.provider}`)
   }
 
   const attemptedModels: string[] = []
   let lastError: unknown = null
 
-  for (const model of buildModelAttemptList(input.model)) {
+  for (const model of buildModelAttemptList(input.provider, input.model)) {
     attemptedModels.push(model)
 
     try {
-      const analyses = await analyzeWithOpenRouterRetries({
-        ...input,
-        model,
-      })
+      const analyses = input.provider === 'gemini'
+        ? await analyzeWithGeminiRetries({
+            ...input,
+            model,
+          })
+        : await analyzeWithOpenRouterRetries({
+            ...input,
+            model,
+          })
 
       if (model !== input.model) {
         writeNewsLog('warn', 'Switched to fallback finance digest model', {
+          provider: input.provider,
           requestedModel: input.model,
           modelUsed: model,
         })
@@ -293,14 +453,16 @@ export async function analyzeNewsCandidates(input: AnalyzeCandidatesInput): Prom
       lastError = error
 
       const detail = formatErrorMessage(error)
-      if (error instanceof OpenRouterRequestError) {
+      if (error instanceof OpenRouterRequestError || error instanceof GeminiRequestError) {
         writeNewsLog('warn', 'Finance digest model failed', {
+          provider: input.provider,
           model,
           status: error.status,
           error: detail,
         })
       } else {
         writeNewsLog('warn', 'Finance digest model failed', {
+          provider: input.provider,
           model,
           error: detail,
         })
@@ -308,8 +470,9 @@ export async function analyzeNewsCandidates(input: AnalyzeCandidatesInput): Prom
     }
   }
 
-  const reason = lastError instanceof Error ? lastError.message : 'Unknown OpenRouter error.'
-  throw new Error(`All OpenRouter model attempts failed (${attemptedModels.join(', ')}): ${reason}`)
+  const providerName = getProviderDisplayName(input.provider)
+  const reason = lastError instanceof Error ? lastError.message : `Unknown ${providerName} error.`
+  throw new Error(`All ${providerName} model attempts failed (${attemptedModels.join(', ')}): ${reason}`)
 }
 
 export function buildFallbackAnalysis(candidates: RankedNewsCandidate[]): NewsAnalysisItem[] {

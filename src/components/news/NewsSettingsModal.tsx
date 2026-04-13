@@ -10,7 +10,7 @@ import {
 import { useEffect, useState } from 'react'
 import { Alert, Button, Checkbox, Input, InputNumber, Modal, Select, Switch, Typography } from 'antd'
 import { FINANCE_NEWS_SOURCES } from '../../../electron/news/sources'
-import type { NewsSettingsInput, NewsSettingsView } from '../../../electron/news/types'
+import type { NewsAnalysisProvider, NewsSettingsInput, NewsSettingsView } from '../../../electron/news/types'
 
 interface NewsSettingsModalProps {
   open: boolean
@@ -21,6 +21,31 @@ interface NewsSettingsModalProps {
   onSave: (input: NewsSettingsInput) => Promise<void>
   onRunNow: () => void
   onOpenLogs: () => void
+}
+
+const PROVIDER_OPTIONS = [
+  { label: 'OpenRouter', value: 'openrouter' },
+  { label: 'Gemini', value: 'gemini' },
+] as const
+
+function getDefaultModelForProvider(provider: NewsAnalysisProvider): string {
+  if (provider === 'gemini') {
+    return 'gemini-2.5-flash'
+  }
+
+  return 'minimax/minimax-m2.5:free'
+}
+
+function getProviderDisplayName(provider: NewsAnalysisProvider): string {
+  return provider === 'gemini' ? 'Gemini' : 'OpenRouter'
+}
+
+function getApiKeyLabel(provider: NewsAnalysisProvider): string {
+  return provider === 'gemini' ? 'Gemini API Key' : 'OpenRouter API Key'
+}
+
+function getModelPlaceholder(provider: NewsAnalysisProvider): string {
+  return provider === 'gemini' ? 'gemini-2.5-flash' : 'minimax/minimax-m2.5:free'
 }
 
 function formatRuntimeTime(value: string | null | undefined): string {
@@ -67,12 +92,12 @@ export function NewsSettingsModal({
   const [enabled, setEnabled] = useState(true)
   const [fetchTime, setFetchTime] = useState('08:30')
   const [topN, setTopN] = useState(10)
-  const [provider, setProvider] = useState<'openrouter'>('openrouter')
+  const [provider, setProvider] = useState<NewsAnalysisProvider>('openrouter')
   const [model, setModel] = useState('minimax/minimax-m2.5:free')
   const [desktopNotificationsEnabled, setDesktopNotificationsEnabled] = useState(true)
   const [sources, setSources] = useState<string[]>([])
   const [apiKey, setApiKey] = useState('')
-  const hasStoredKey = settings?.apiKeyConfigured ?? false
+  const hasStoredKey = settings?.apiKeyConfiguredByProvider?.[provider] ?? settings?.apiKeyConfigured ?? false
 
   useEffect(() => {
     if (!settings || !open) {
@@ -100,6 +125,11 @@ export function NewsSettingsModal({
       sources,
       apiKey: apiKey.trim() || undefined,
     })
+  }
+
+  const handleProviderChange = (nextProvider: NewsAnalysisProvider) => {
+    setProvider(nextProvider)
+    setModel(getDefaultModelForProvider(nextProvider))
   }
 
   return (
@@ -144,7 +174,7 @@ export function NewsSettingsModal({
 
         <div className="news-settings-modal__status-stack">
           <span className={`news-status-pill ${hasStoredKey ? 'news-status-pill--live' : 'news-status-pill--warning'}`}>
-            {hasStoredKey ? 'OpenRouter Key 已连接' : '等待配置 API Key'}
+            {hasStoredKey ? `${getProviderDisplayName(provider)} Key 已连接` : `等待配置 ${getProviderDisplayName(provider)} Key`}
           </span>
           <span className={`news-status-pill ${enabled ? 'news-status-pill--muted' : 'news-status-pill--neutral'}`}>
             {enabled ? '每日提醒开启' : '每日提醒暂停'}
@@ -241,26 +271,26 @@ export function NewsSettingsModal({
               <Typography.Text className="news-settings-modal__label">模型提供商</Typography.Text>
               <Select
                 value={provider}
-                options={[{ label: 'OpenRouter', value: 'openrouter' }]}
-                onChange={(value) => setProvider(value as 'openrouter')}
+                options={PROVIDER_OPTIONS as unknown as Array<{ label: string; value: string }>}
+                onChange={(value) => handleProviderChange(value as NewsAnalysisProvider)}
               />
             </div>
 
             <div className="news-settings-modal__field">
               <Typography.Text className="news-settings-modal__label">模型名称</Typography.Text>
-              <Input value={model} onChange={(event) => setModel(event.target.value)} placeholder="minimax/minimax-m2.5:free" />
+              <Input value={model} onChange={(event) => setModel(event.target.value)} placeholder={getModelPlaceholder(provider)} />
             </div>
           </div>
 
           <div className="news-settings-modal__section">
-            <Typography.Text className="news-settings-modal__label">OpenRouter API Key</Typography.Text>
+            <Typography.Text className="news-settings-modal__label">{getApiKeyLabel(provider)}</Typography.Text>
             <Input.Password
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
-              placeholder={hasStoredKey ? '留空表示继续使用已保存的 Key' : '请先输入你的 API Key'}
+              placeholder={hasStoredKey ? '留空表示继续使用已保存的 Key' : `请先输入你的 ${getProviderDisplayName(provider)} API Key`}
             />
             <Typography.Text className="news-settings-modal__hint">
-              {hasStoredKey ? '当前已保存 Key。留空不会覆盖。' : '当前尚未配置 Key，暂时无法调用模型生成中文摘要。'}
+              {hasStoredKey ? '当前已保存 Key。留空不会覆盖。' : `当前尚未配置 ${getProviderDisplayName(provider)} Key，暂时无法调用模型生成中文摘要。`}
             </Typography.Text>
           </div>
         </section>
