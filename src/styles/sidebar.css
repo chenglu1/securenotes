@@ -490,15 +490,7 @@
   text-align: center;
 }
 
-@media (max-width: 900px) {
-  .shell-sider.ant-layout-sider {
-    min-width: 100% !important;
-    max-width: 100% !important;
-    width: 100% !important;
-  }
-}
-
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .sidebar-primary-actions {
     grid-template-columns: 1fr;
   }

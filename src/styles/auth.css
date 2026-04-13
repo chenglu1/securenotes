@@ -152,7 +152,7 @@
   font-size: 12px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .auth-modal .ant-modal-content {
     padding: 20px !important;
   }

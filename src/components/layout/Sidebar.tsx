@@ -16,6 +16,7 @@ import { useNoteStore } from '../../stores/noteStore'
 
 interface SidebarProps {
   onShowAuth: () => void
+  onRequestClose?: () => void
 }
 
 function formatRelativeTime(dateStr: string) {
@@ -68,7 +69,7 @@ function shouldShowNoteStatus(note: { is_dirty: number; sync_version: number }, 
   return note.is_dirty || !isAuthenticated || note.sync_version === 0
 }
 
-export function Sidebar({ onShowAuth }: SidebarProps) {
+export function Sidebar({ onShowAuth, onRequestClose }: SidebarProps) {
   const notes = useNoteStore((s) => s.notes)
   const selectedNoteId = useNoteStore((s) => s.selectedNoteId)
   const searchQuery = useNoteStore((s) => s.searchQuery)
@@ -94,7 +95,19 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
 
   const handleCreateNote = useCallback(async () => {
     await createNote()
-  }, [createNote])
+    onRequestClose?.()
+  }, [createNote, onRequestClose])
+
+  const handleSelectNote = useCallback(async (noteId: string) => {
+    setOpenMenuNoteId(null)
+    await selectNote(noteId)
+    onRequestClose?.()
+  }, [onRequestClose, selectNote])
+
+  const handleOpenAuth = useCallback(() => {
+    onShowAuth()
+    onRequestClose?.()
+  }, [onRequestClose, onShowAuth])
 
   const startTitleEdit = useCallback((noteId: string, title: string) => {
     setOpenMenuNoteId(null)
@@ -133,9 +146,8 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
     }
 
     event.preventDefault()
-    setOpenMenuNoteId(null)
-    void selectNote(noteId)
-  }, [editingNoteId, selectNote])
+    void handleSelectNote(noteId)
+  }, [editingNoteId, handleSelectNote])
 
   useEffect(() => {
     if (!hasHydratedSearch.current) {
@@ -287,7 +299,7 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
             size="large"
             icon={<LoginOutlined />}
             className="secondary-action"
-            onClick={onShowAuth}
+            onClick={handleOpenAuth}
           >
             {isReauthRequired ? '重新登录' : '登录'}
           </Button>
@@ -319,8 +331,7 @@ export function Sidebar({ onShowAuth }: SidebarProps) {
                   return
                 }
 
-                setOpenMenuNoteId(null)
-                void selectNote(note.id)
+                void handleSelectNote(note.id)
               }}
               onKeyDown={(event) => handleNoteCardKeyDown(event, note.id)}
             >
