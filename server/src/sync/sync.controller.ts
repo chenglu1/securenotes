@@ -10,7 +10,8 @@ import {
   Query,
   UnauthorizedException,
 } from '@nestjs/common';
-import { SyncService, UpsertNoteDto } from './sync.service';
+import { SyncService } from './sync.service';
+import { UpsertNoteDto } from './dto/upsert-note.dto';
 import { AuthService } from '../auth/auth.service';
 import { ok } from '../common/http/api-response';
 
@@ -37,7 +38,7 @@ export class SyncController {
     @Headers('authorization') auth?: string,
   ) {
     const userId = await this.getUserId(auth);
-    const result = await this.syncService.upsertNote(userId, { ...body, id } as UpsertNoteDto & { id: string });
+    const result = await this.syncService.upsertNote(userId, id, body);
     if (result.status === 'conflict') {
       throw new ConflictException({
         message: 'Note version conflict',

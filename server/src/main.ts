@@ -18,6 +18,7 @@ async function bootstrap() {
     new ValidationPipe({
       whitelist: true,
       transform: true,
+      forbidNonWhitelisted: true, // 额外字段直接返回 400，而非静默丢弃
     }),
   );
   app.useGlobalFilters(new ApiExceptionFilter());

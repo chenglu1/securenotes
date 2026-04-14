@@ -503,6 +503,30 @@ interface NoteStore {
   syncToCloud: () => Promise<void>
 }
 
+// ── 认证状态重置常量 ──────────────────────────────────────────────
+// 集中定义"清空认证 + 清空笔记"的完整状态切片，
+// 避免在多处 set({...}) 中遗漏字段导致状态不一致的 Bug。
+const RESET_AUTH_STATE = {
+  notes: [] as NoteSummary[],
+  selectedNoteId: null as string | null,
+  selectedNote: null as Note | null,
+  activeEditorNoteId: null as string | null,
+  activeEditorFlush: null as EditorFlushHandler | null,
+  isAuthenticated: false,
+  userId: null as string | null,
+  userEmail: null as string | null,
+  token: null as string | null,
+  encryptionKey: null as string | null,
+  pendingGoogleAuth: null as AuthResponse | null,
+  syncAllStatus: 'idle' as SyncActionStatus,
+  syncCurrentStatus: 'idle' as SyncActionStatus,
+}
+
+/** 需要重新登录时的状态切片（syncStatus 设为 reauth-required） */
+function makeReauthState() {
+  return { ...RESET_AUTH_STATE, syncStatus: 'reauth-required' as SyncStatus }
+}
+
 export const useNoteStore = create<NoteStore>((set, get) => ({
   notes: [],
   selectedNoteId: null,
@@ -737,22 +761,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         await window.api.clearAuthSession()
         localStorage.removeItem('auth_token')
         localStorage.removeItem('user_id')
-        set({
-          notes: [],
-          selectedNoteId: null,
-          selectedNote: null,
-          activeEditorNoteId: null,
-          activeEditorFlush: null,
-          isAuthenticated: false,
-          userId: null,
-          userEmail: null,
-          token: null,
-          encryptionKey: null,
-          pendingGoogleAuth: null,
-          syncStatus: 'reauth-required',
-          syncAllStatus: 'idle',
-          syncCurrentStatus: 'idle',
-        })
+        set(makeReauthState())
         return
       }
 
@@ -911,22 +920,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     }
     localStorage.removeItem('auth_token')
     localStorage.removeItem('user_id')
-    set({
-      notes: [],
-      selectedNoteId: null,
-      selectedNote: null,
-      activeEditorNoteId: null,
-      activeEditorFlush: null,
-      isAuthenticated: false,
-      userId: null,
-      userEmail: null,
-      token: null,
-      encryptionKey: null,
-      pendingGoogleAuth: null,
-      syncStatus: 'idle',
-      syncAllStatus: 'idle',
-      syncCurrentStatus: 'idle',
-    })
+    set({ ...RESET_AUTH_STATE, syncStatus: 'idle' as SyncStatus })
     await get().loadNotes()
   },
 
@@ -934,43 +928,13 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     const { token, encryptionKey, userId } = get()
     if (!token || !encryptionKey) {
       await clearAuthForReauth(userId)
-      set({
-        notes: [],
-        selectedNoteId: null,
-        selectedNote: null,
-        activeEditorNoteId: null,
-        activeEditorFlush: null,
-        isAuthenticated: false,
-        userId: null,
-        userEmail: null,
-        token: null,
-        encryptionKey: null,
-        pendingGoogleAuth: null,
-        syncStatus: 'reauth-required',
-        syncAllStatus: 'idle',
-        syncCurrentStatus: 'idle',
-      })
+      set(makeReauthState())
       throw new Error('请重新登录以恢复同步')
     }
 
     if (!userId) {
       await clearAuthForReauth(null)
-      set({
-        notes: [],
-        selectedNoteId: null,
-        selectedNote: null,
-        activeEditorNoteId: null,
-        activeEditorFlush: null,
-        isAuthenticated: false,
-        userId: null,
-        userEmail: null,
-        token: null,
-        encryptionKey: null,
-        pendingGoogleAuth: null,
-        syncStatus: 'reauth-required',
-        syncAllStatus: 'idle',
-        syncCurrentStatus: 'idle',
-      })
+      set(makeReauthState())
       throw new Error('当前登录态缺少用户标识，请重新登录。')
     }
 
@@ -987,22 +951,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
         if (response.status === 401 || response.status === 403) {
           await clearAuthForReauth(userId)
-          set({
-            notes: [],
-            selectedNoteId: null,
-            selectedNote: null,
-            activeEditorNoteId: null,
-            activeEditorFlush: null,
-            isAuthenticated: false,
-            userId: null,
-            userEmail: null,
-            token: null,
-            encryptionKey: null,
-            pendingGoogleAuth: null,
-            syncStatus: 'reauth-required',
-            syncAllStatus: 'idle',
-            syncCurrentStatus: 'idle',
-          })
+          set(makeReauthState())
           throw new Error('当前登录态属于其他后端环境，请重新登录。')
         }
 
@@ -1063,43 +1012,13 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     const { token, encryptionKey, userId } = get()
     if (!token || !encryptionKey) {
       await clearAuthForReauth(userId)
-      set({
-        notes: [],
-        selectedNoteId: null,
-        selectedNote: null,
-        activeEditorNoteId: null,
-        activeEditorFlush: null,
-        isAuthenticated: false,
-        userId: null,
-        userEmail: null,
-        token: null,
-        encryptionKey: null,
-        pendingGoogleAuth: null,
-        syncStatus: 'reauth-required',
-        syncAllStatus: 'idle',
-        syncCurrentStatus: 'idle',
-      })
+      set(makeReauthState())
       return
     }
 
     if (!userId) {
       await clearAuthForReauth(null)
-      set({
-        notes: [],
-        selectedNoteId: null,
-        selectedNote: null,
-        activeEditorNoteId: null,
-        activeEditorFlush: null,
-        isAuthenticated: false,
-        userId: null,
-        userEmail: null,
-        token: null,
-        encryptionKey: null,
-        pendingGoogleAuth: null,
-        syncStatus: 'reauth-required',
-        syncAllStatus: 'idle',
-        syncCurrentStatus: 'idle',
-      })
+      set(makeReauthState())
       return
     }
 
@@ -1159,43 +1078,13 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     const { token, encryptionKey, userId } = get()
     if (!token || !encryptionKey) {
       await clearAuthForReauth(userId)
-      set({
-        notes: [],
-        selectedNoteId: null,
-        selectedNote: null,
-        activeEditorNoteId: null,
-        activeEditorFlush: null,
-        isAuthenticated: false,
-        userId: null,
-        userEmail: null,
-        token: null,
-        encryptionKey: null,
-        pendingGoogleAuth: null,
-        syncStatus: 'reauth-required',
-        syncAllStatus: 'idle',
-        syncCurrentStatus: 'idle',
-      })
+      set(makeReauthState())
       return
     }
 
     if (!userId) {
       await clearAuthForReauth(null)
-      set({
-        notes: [],
-        selectedNoteId: null,
-        selectedNote: null,
-        activeEditorNoteId: null,
-        activeEditorFlush: null,
-        isAuthenticated: false,
-        userId: null,
-        userEmail: null,
-        token: null,
-        encryptionKey: null,
-        pendingGoogleAuth: null,
-        syncStatus: 'reauth-required',
-        syncAllStatus: 'idle',
-        syncCurrentStatus: 'idle',
-      })
+      set(makeReauthState())
       return
     }
 

@@ -1,24 +1,27 @@
 import { BadRequestException, Body, Controller, Get, Headers, Post, Query, Res, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { ok } from '../common/http/api-response';
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
+import { SyncKeyDto } from './dto/sync-key.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('register')
-  async register(@Body() body: { email: string; password: string }) {
+  async register(@Body() body: RegisterDto) {
     return ok(await this.authService.register(body.email, body.password), '注册成功');
   }
 
   @Post('login')
-  async login(@Body() body: { email: string; password: string }) {
+  async login(@Body() body: LoginDto) {
     return ok(await this.authService.login(body.email, body.password), '登录成功');
   }
 
   @Post('sync-key')
   async ensureSyncKey(
-    @Body() body: { keyVerifier: string },
+    @Body() body: SyncKeyDto,
     @Headers('authorization') auth?: string,
   ) {
     if (!auth?.startsWith('Bearer ')) {

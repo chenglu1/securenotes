@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository, MoreThan, IsNull } from 'typeorm';
 import { Note } from '../entities/note.entity';
 import { User } from '../entities/user.entity';
+import { UpsertNoteDto } from './dto/upsert-note.dto';
 
 export interface NoteSummaryDto {
   id: string;
@@ -42,11 +43,11 @@ export class SyncService {
     * The server stores whatever the client sends. Older clients send encrypted
     * payloads, while the current Google plaintext mode uploads raw text.
    */
-  async upsertNote(userId: string, noteData: UpsertNoteDto): Promise<UpsertNoteResult> {
+  async upsertNote(userId: string, noteId: string, noteData: UpsertNoteDto): Promise<UpsertNoteResult> {
       return this.dataSource.transaction(async (manager) => {
         const noteRepo = manager.getRepository(Note);
         let note = await noteRepo.findOne({
-          where: { id: noteData.id, userId },
+          where: { id: noteId, userId },
           lock: { mode: 'pessimistic_write' },
         });
 
@@ -68,7 +69,7 @@ export class SyncService {
 
         const nextChangeVersion = await this.allocateNextChangeVersion(manager, userId);
         note = noteRepo.create({
-          id: noteData.id,
+          id: noteId,
           userId,
           encryptedTitle: noteData.encryptedTitle,
           encryptedContent: noteData.encryptedContent,
@@ -124,6 +125,11 @@ export class SyncService {
       .orderBy('note.updatedAt', 'DESC');
 
     if (normalizedQuery) {
+      // ⚠️ 注意：此处对 encryptedTitle 做明文模糊匹配。
+      // 对于使用密码登录（password 模式）的用户，笔记标题已加密，搜索无法匹配明文内容。
+      // 该搜索仅对 Google 登录（plaintext 模式，PLAINTEXT_SYNC_KEY）的用户有效，
+      // 因为该模式下 encryptedTitle 存储的是明文。
+      // 加密用户的全文搜索应在客户端本地 SQLite 完成，不依赖此端点。
       queryBuilder.andWhere('note.encryptedTitle ILIKE :query', {
         query: `%${normalizedQuery}%`,
       });
@@ -152,14 +158,9 @@ export class SyncService {
   }
 }
 
-export interface UpsertNoteDto {
-  id: string;
-  encryptedTitle: string;
-  encryptedContent: string;
-  yjsState?: number[];
-  syncVersion: number;
-  deletedAt?: string;
-}
+// UpsertNoteDto 已迁移至 ./dto/upsert-note.dto.ts，使用 class + class-validator 装饰器。
+// 导出类型供其他模块使用（controller 直接从 dto 引入）。
+export type { UpsertNoteDto };
 
 export interface UpsertNoteResult {
   status: 'created' | 'updated' | 'conflict';

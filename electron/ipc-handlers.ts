@@ -17,13 +17,19 @@ import {
 } from './secure-store'
 import { startGoogleAuth } from './google-auth'
 
-const notes = new NotesRepository()
-const tags = new TagsRepository()
-const attachments = new AttachmentsRepository()
+// 仓库实例延迟到 initDatabase() 完成后创建，避免模块加载时 DB 未初始化的时序问题
+let notes: NotesRepository
+let tags: TagsRepository
+let attachments: AttachmentsRepository
 
 export async function registerIpcHandlers(win: BrowserWindow | null, newsService?: NewsDigestService) {
   // Initialize database first (async for sql.js WASM loading)
   await initDatabase()
+
+  // 在 DB 初始化完成后再实例化仓库，确保时序正确
+  notes = new NotesRepository()
+  tags = new TagsRepository()
+  attachments = new AttachmentsRepository()
 
   // ── Window Control ─────────────────────────────────────
   ipcMain.handle('window:minimize', () => {
