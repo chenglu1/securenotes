@@ -3,6 +3,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   EllipsisOutlined,
+  GithubOutlined,
   LoginOutlined,
   LogoutOutlined,
   PlusOutlined,
@@ -23,6 +24,7 @@ interface SidebarProps {
   onShowNewsDigest?: () => void
   onShowNewsSettings?: () => void
   onRunNewsDigest?: () => void
+  onShowGithubTrending?: () => void
   isNewsRunning?: boolean
 }
 
@@ -82,6 +84,7 @@ export function Sidebar({
   onShowNewsDigest,
   onShowNewsSettings,
   onRunNewsDigest,
+  onShowGithubTrending,
   isNewsRunning = false,
 }: SidebarProps) {
   const notes = useNoteStore((s) => s.notes)
@@ -137,6 +140,11 @@ export function Sidebar({
     onRunNewsDigest?.()
     onRequestClose?.()
   }, [onRequestClose, onRunNewsDigest])
+
+  const handleShowGithubTrending = useCallback(() => {
+    onShowGithubTrending?.()
+    onRequestClose?.()
+  }, [onRequestClose, onShowGithubTrending])
 
   const startTitleEdit = useCallback((noteId: string, title: string) => {
     setOpenMenuNoteId(null)
@@ -335,15 +343,45 @@ export function Sidebar({
         )}
       </div>
 
-      <div className="sidebar-news-actions">
-        <Button icon={<NotificationOutlined />} onClick={handleShowNewsDigest}>
-          今日热点
+      <div className="sidebar-quick-actions">
+        <Button className="sidebar-quick-action sidebar-quick-action--digest" onClick={handleShowNewsDigest}>
+          <span className="sidebar-quick-action__icon">
+            <NotificationOutlined />
+          </span>
+          <span className="sidebar-quick-action__copy">
+            <span className="sidebar-quick-action__title">今日热点</span>
+            <span className="sidebar-quick-action__desc">查看摘要</span>
+          </span>
         </Button>
-        <Button icon={<ThunderboltOutlined />} loading={isNewsRunning} onClick={handleRunNewsDigest}>
-          立即抓取
+
+        <Button className="sidebar-quick-action sidebar-quick-action--run" onClick={handleRunNewsDigest}>
+          <span className="sidebar-quick-action__icon">
+            {isNewsRunning ? <SyncOutlined spin /> : <ThunderboltOutlined />}
+          </span>
+          <span className="sidebar-quick-action__copy">
+            <span className="sidebar-quick-action__title">立即抓取</span>
+            <span className="sidebar-quick-action__desc">刷新热点</span>
+          </span>
         </Button>
-        <Button icon={<SettingOutlined />} onClick={handleShowNewsSettings}>
-          提醒设置
+
+        <Button className="sidebar-quick-action sidebar-quick-action--settings" onClick={handleShowNewsSettings}>
+          <span className="sidebar-quick-action__icon">
+            <SettingOutlined />
+          </span>
+          <span className="sidebar-quick-action__copy">
+            <span className="sidebar-quick-action__title">提醒设置</span>
+            <span className="sidebar-quick-action__desc">定时配置</span>
+          </span>
+        </Button>
+
+        <Button className="sidebar-quick-action sidebar-quick-action--github" onClick={handleShowGithubTrending}>
+          <span className="sidebar-quick-action__icon">
+            <GithubOutlined />
+          </span>
+          <span className="sidebar-quick-action__copy">
+            <span className="sidebar-quick-action__title">GitHub 热门</span>
+            <span className="sidebar-quick-action__desc">开源榜单</span>
+          </span>
         </Button>
       </div>
 

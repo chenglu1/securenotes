@@ -2,12 +2,31 @@ import { useCallback, useEffect, useState } from 'react'
 import { App as AntdApp } from 'antd'
 import { AppShell } from './components/layout/AppShell'
 import { AuthModal } from './components/auth/AuthModal'
+import { GithubTrendingModal } from './components/github/GithubTrendingModal'
 import { NewsDigestModal } from './components/news/NewsDigestModal'
 import { NewsSettingsModal } from './components/news/NewsSettingsModal'
 import { useNoteStore } from './stores/noteStore'
+import type { GithubTrendingPeriod, GithubTrendingResponse } from '../electron/github-trending/types'
 import type { NewsDigest, NewsSettingsInput, NewsSettingsView } from '../electron/news/types'
 
 let bootstrapPromise: Promise<void> | null = null
+
+function getDisplayErrorMessage(error: unknown, fallback: string) {
+  if (!(error instanceof Error) || !error.message.trim()) {
+    return fallback
+  }
+
+  const normalized = error.message
+    .replace(/^Error invoking remote method '[^']+':\s*/i, '')
+    .replace(/^TypeError:\s*/i, '')
+    .trim()
+
+  if (!normalized || normalized.toLowerCase() === 'fetch failed') {
+    return fallback
+  }
+
+  return normalized
+}
 
 export function App() {
   const { message } = AntdApp.useApp()
@@ -20,11 +39,48 @@ export function App() {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showNewsDigestModal, setShowNewsDigestModal] = useState(false)
   const [showNewsSettingsModal, setShowNewsSettingsModal] = useState(false)
+  const [showGithubTrendingModal, setShowGithubTrendingModal] = useState(false)
   const [latestNewsDigest, setLatestNewsDigest] = useState<NewsDigest | null>(null)
   const [newsSettings, setNewsSettings] = useState<NewsSettingsView | null>(null)
+  const [githubTrending, setGithubTrending] = useState<GithubTrendingResponse | null>(null)
   const [newsDigestLoading, setNewsDigestLoading] = useState(false)
   const [newsSettingsSaving, setNewsSettingsSaving] = useState(false)
   const [newsRunning, setNewsRunning] = useState(false)
+  const [githubTrendingPeriod, setGithubTrendingPeriod] = useState<GithubTrendingPeriod>('daily')
+  const [githubTrendingLoading, setGithubTrendingLoading] = useState(false)
+  const [githubTrendingRefreshing, setGithubTrendingRefreshing] = useState(false)
+
+  const loadGithubTrending = useCallback(async (
+    period: GithubTrendingPeriod,
+    options?: { showModal?: boolean; forceRefresh?: boolean },
+  ) => {
+    const showModal = options?.showModal ?? false
+    const forceRefresh = options?.forceRefresh ?? false
+
+    if (showModal) {
+      setShowGithubTrendingModal(true)
+    }
+
+    if (forceRefresh) {
+      setGithubTrendingRefreshing(true)
+    } else {
+      setGithubTrendingLoading(true)
+    }
+
+    setGithubTrendingPeriod(period)
+
+    try {
+      const response = await window.api.getGithubTrending(period, { forceRefresh })
+      setGithubTrending(response)
+    } catch (error) {
+      console.error('Failed to load GitHub trending:', error)
+      const nextMessage = getDisplayErrorMessage(error, '读取 GitHub 热门项目失败，请稍后重试。')
+      message.error(nextMessage)
+    } finally {
+      setGithubTrendingLoading(false)
+      setGithubTrendingRefreshing(false)
+    }
+  }, [message])
 
   const loadLatestNewsDigest = useCallback(async (showModal = false) => {
     setNewsDigestLoading(true)
@@ -62,6 +118,10 @@ export function App() {
   const handleShowNewsSettings = useCallback(() => {
     void loadNewsSettings(true)
   }, [loadNewsSettings])
+
+  const handleShowGithubTrending = useCallback(() => {
+    void loadGithubTrending(githubTrendingPeriod, { showModal: true })
+  }, [githubTrendingPeriod, loadGithubTrending])
 
   const handleRunNewsDigest = useCallback(async () => {
     setNewsRunning(true)
@@ -169,6 +229,7 @@ export function App() {
         onRunNewsDigest={() => {
           void handleRunNewsDigest()
         }}
+        onShowGithubTrending={handleShowGithubTrending}
         isNewsRunning={newsRunning}
       />
       {showAuthModal && !isAuthenticated && (
@@ -197,6 +258,20 @@ export function App() {
         }}
         onOpenLogs={() => {
           void handleOpenNewsLog()
+        }}
+      />
+      <GithubTrendingModal
+        open={showGithubTrendingModal}
+        period={githubTrendingPeriod}
+        data={githubTrending}
+        loading={githubTrendingLoading}
+        refreshing={githubTrendingRefreshing}
+        onClose={() => setShowGithubTrendingModal(false)}
+        onPeriodChange={(period) => {
+          void loadGithubTrending(period)
+        }}
+        onRefresh={() => {
+          void loadGithubTrending(githubTrendingPeriod, { forceRefresh: true })
         }}
       />
     </>

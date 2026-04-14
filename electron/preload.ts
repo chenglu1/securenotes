@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { GithubTrendingPeriod, GithubTrendingResponse } from './github-trending/types'
 import type { NewsDigest, NewsSettingsInput, NewsSettingsView } from './news/types'
 
 export interface GoogleAuthResult {
@@ -79,6 +80,8 @@ const api = {
   getLatestNewsDigest: (): Promise<NewsDigest | null> => ipcRenderer.invoke('news:getLatestDigest'),
   runNewsDigestNow: (): Promise<NewsDigest> => ipcRenderer.invoke('news:runNow'),
   openNewsLogFile: (): Promise<void> => ipcRenderer.invoke('news:openLogFile'),
+  getGithubTrending: (period: GithubTrendingPeriod, options?: { forceRefresh?: boolean }): Promise<GithubTrendingResponse> =>
+    ipcRenderer.invoke('github-trending:getTopProjects', period, options),
 
   // ── App Events ─────────────────────────────────────────
   onMainProcessMessage: (callback: (message: string) => void) => {

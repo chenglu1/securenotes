@@ -1,11 +1,14 @@
 {
   "name": "securenotes",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "dist-electron/main.js",
   "description": "离线优先、支持实时协作、端到端加密的 Markdown 笔记应用",
   "author": "chenglud <chenglud@digitalchina.com>",
   "license": "MIT",
   "private": true,
+  "engines": {
+    "node": ">=22.17.0"
+  },
   "keywords": [
     "electron",
     "markdown",
@@ -30,7 +33,7 @@
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.27",
-    "electron": "^28.1.0",
+    "electron": "^39.8.7",
     "electron-builder": "^24.4.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
@@ -43,6 +46,7 @@
     "@ant-design/icons": "^6.1.1",
     "@chenglu1/xeditor-editor": "^0.0.12",
     "antd": "^6.3.5",
+    "cheerio": "^1.2.0",
     "libsodium-wrappers-sumo": "^0.8.2",
     "lucide-react": "^0.575.0",
     "react": "^18.3.1",

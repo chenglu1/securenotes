@@ -306,21 +306,23 @@ export function EditorPane() {
       <section className="editor-panel">
         <div className="editor-body editor-body--empty editor-body--notion-empty">
           <div className="empty-stage empty-stage--minimal">
-            <Typography.Title level={2} className="empty-stage__title">
-              开始记录
-            </Typography.Title>
-            <Typography.Paragraph className="empty-stage__description">
-              新建一篇笔记，像使用文档工具一样开始写作。
-            </Typography.Paragraph>
+            <div className="empty-stage__content">
+              <Typography.Title level={2} className="empty-stage__title">
+                开始记录
+              </Typography.Title>
+              <Typography.Paragraph className="empty-stage__description">
+                新建一篇笔记，像使用文档工具一样开始写作。
+              </Typography.Paragraph>
 
-            <Button
-              type="primary"
-              size="large"
-              icon={<PlusOutlined />}
-              onClick={() => void handleCreateFromEmpty()}
-            >
-              新建笔记
-            </Button>
+              <Button
+                type="primary"
+                size="large"
+                icon={<PlusOutlined />}
+                onClick={() => void handleCreateFromEmpty()}
+              >
+                新建笔记
+              </Button>
+            </div>
           </div>
         </div>
       </section>

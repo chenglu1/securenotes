@@ -9,6 +9,7 @@ import './styles/sidebar.css'
 import './styles/editor.css'
 import './styles/auth.css'
 import './styles/news.css'
+import './styles/github.css'
 
 const antdTheme: ThemeConfig = {
   token: {

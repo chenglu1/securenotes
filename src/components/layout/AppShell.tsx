@@ -9,6 +9,7 @@ interface AppShellProps {
   onShowNewsDigest: () => void
   onShowNewsSettings: () => void
   onRunNewsDigest: () => void
+  onShowGithubTrending: () => void
   isNewsRunning: boolean
 }
 
@@ -23,7 +24,7 @@ function getInitialCompactLayout() {
   return window.matchMedia(COMPACT_LAYOUT_QUERY).matches
 }
 
-export function AppShell({ onShowAuth, onShowNewsDigest, onShowNewsSettings, onRunNewsDigest, isNewsRunning }: AppShellProps) {
+export function AppShell({ onShowAuth, onShowNewsDigest, onShowNewsSettings, onRunNewsDigest, onShowGithubTrending, isNewsRunning }: AppShellProps) {
   const [isCompactLayout, setIsCompactLayout] = useState(getInitialCompactLayout)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
@@ -77,6 +78,7 @@ export function AppShell({ onShowAuth, onShowNewsDigest, onShowNewsSettings, onR
                 onShowNewsDigest={onShowNewsDigest}
                 onShowNewsSettings={onShowNewsSettings}
                 onRunNewsDigest={onRunNewsDigest}
+                onShowGithubTrending={onShowGithubTrending}
                 isNewsRunning={isNewsRunning}
               />
             </Sider>
@@ -127,6 +129,7 @@ export function AppShell({ onShowAuth, onShowNewsDigest, onShowNewsSettings, onR
                 onShowNewsDigest={onShowNewsDigest}
                 onShowNewsSettings={onShowNewsSettings}
                 onRunNewsDigest={onRunNewsDigest}
+                onShowGithubTrending={onShowGithubTrending}
                 isNewsRunning={isNewsRunning}
               />
             </aside>

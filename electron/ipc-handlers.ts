@@ -3,7 +3,9 @@ import { initDatabase } from './database/connection'
 import { NotesRepository } from './database/repositories/notes'
 import { TagsRepository } from './database/repositories/tags'
 import { AttachmentsRepository } from './database/repositories/attachments'
+import { GithubTrendingService } from './github-trending/service'
 import type { NewsDigestService } from './news/service'
+import type { GithubTrendingPeriod } from './github-trending/types'
 import {
   clearAuthSession,
   clearEncryptionKey,
@@ -21,6 +23,7 @@ import { startGoogleAuth } from './google-auth'
 let notes: NotesRepository
 let tags: TagsRepository
 let attachments: AttachmentsRepository
+const githubTrendingService = new GithubTrendingService()
 
 export async function registerIpcHandlers(win: BrowserWindow | null, newsService?: NewsDigestService) {
   // Initialize database first (async for sql.js WASM loading)
@@ -108,6 +111,11 @@ export async function registerIpcHandlers(win: BrowserWindow | null, newsService
     }
 
     return newsService.openLogFile()
+  })
+
+  // ── GitHub Trending ───────────────────────────────────
+  ipcMain.handle('github-trending:getTopProjects', (_e, period: GithubTrendingPeriod, options?: { forceRefresh?: boolean }) => {
+    return githubTrendingService.getTrending(period, options?.forceRefresh)
   })
 
   // ── Notes ──────────────────────────────────────────────
