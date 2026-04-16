@@ -40,20 +40,22 @@
     "typescript": "^5.0.3",
     "vite": "^5.0.10",
     "vite-plugin-electron": "^0.28.8",
-    "vite-plugin-electron-renderer": "^0.14.6"
-  },
-  "dependencies": {
+    "vite-plugin-electron-renderer": "^0.14.6",
     "@ant-design/icons": "^6.1.1",
     "@chenglu1/xeditor-editor": "^0.0.12",
     "antd": "^6.3.5",
-    "cheerio": "^1.2.0",
-    "libsodium-wrappers-sumo": "^0.8.2",
     "lucide-react": "^0.575.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "rss-parser": "^3.13.0",
-    "sql.js": "^1.14.0",
-    "uuid": "^13.0.0",
     "zustand": "^5.0.11"
+  },
+  "dependencies": {
+    // ── 主进程运行时依赖（不被 Vite 打包，必须在 node_modules 中）──
+    "sql.js": "^1.14.0",          // 主进程，明确 external
+    "cheerio": "^1.2.0",          // 主进程 github-trending/service.ts
+    "rss-parser": "^3.13.0",      // 主进程 news/fetchers.ts
+    "uuid": "^13.0.0",            // 主进程 database/repositories/* 多处
+    // ── 渲染进程 WASM 库，需要在 asar 外访问 ──
+    "libsodium-wrappers-sumo": "^0.8.2"
   }
 }

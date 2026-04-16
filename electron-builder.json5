@@ -2,8 +2,12 @@
  * @see https://www.electron.build/configuration/configuration
  */
 {
-  "appId": "YourAppID",
+  "appId": "com.chenglud.securenotes",
   "asar": true,
+  "asarUnpack": [
+    // wasm 文件需要在 asar 外访问
+    "**/*.wasm"
+  ],
   "protocols": [
     {
       "name": "SecureNotes",
@@ -17,12 +21,25 @@
   },
   "files": [
     "dist-electron",
-    "dist"
+    "dist",
+    "node_modules",
+    // 排除不必要的文件，减小包体积
+    "!**/*.map",
+    "!**/*.md",
+    "!**/test/**",
+    "!**/tests/**",
+    "!**/__tests__/**",
+    "!**/LICENSE*",
+    "!**/CHANGELOG*",
+    "!**/.npmignore"
   ],
   "mac": {
     "artifactName": "${productName}_${version}.${ext}",
     "target": [
-      "dmg"
+      {
+        "target": "dmg",
+        "arch": ["arm64"]
+      }
     ]
   },
   "win": {
