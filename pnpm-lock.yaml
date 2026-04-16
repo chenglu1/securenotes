@@ -8,30 +8,12 @@ importers:
 
   .:
     dependencies:
-      '@ant-design/icons':
-        specifier: ^6.1.1
-        version: 6.1.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@chenglu1/xeditor-editor':
-        specifier: ^0.0.12
-        version: 0.0.12(@floating-ui/dom@1.7.6)(@tiptap/extension-text-style@3.20.4(@tiptap/core@3.20.4(@tiptap/pm@3.20.4)))(@tiptap/extensions@3.20.4(@tiptap/core@3.20.4(@tiptap/pm@3.20.4))(@tiptap/pm@3.20.4))(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      antd:
-        specifier: ^6.3.5
-        version: 6.3.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       cheerio:
         specifier: ^1.2.0
         version: 1.2.0
       libsodium-wrappers-sumo:
         specifier: ^0.8.2
         version: 0.8.2
-      lucide-react:
-        specifier: ^0.575.0
-        version: 0.575.0(react@18.3.1)
-      react:
-        specifier: ^18.3.1
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.3.1
-        version: 18.3.1(react@18.3.1)
       rss-parser:
         specifier: ^3.13.0
         version: 3.13.0
@@ -41,10 +23,13 @@ importers:
       uuid:
         specifier: ^13.0.0
         version: 13.0.0
-      zustand:
-        specifier: ^5.0.11
-        version: 5.0.12(@types/react@18.3.28)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
     devDependencies:
+      '@ant-design/icons':
+        specifier: ^6.1.1
+        version: 6.1.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@chenglu1/xeditor-editor':
+        specifier: ^0.0.12
+        version: 0.0.12(@floating-ui/dom@1.7.6)(@tiptap/extension-text-style@3.20.4(@tiptap/core@3.20.4(@tiptap/pm@3.20.4)))(@tiptap/extensions@3.20.4(@tiptap/core@3.20.4(@tiptap/pm@3.20.4))(@tiptap/pm@3.20.4))(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react':
         specifier: ^18.3.18
         version: 18.3.28
@@ -57,6 +42,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^4.7.0
         version: 4.7.0(vite@5.4.21(@types/node@25.5.0))
+      antd:
+        specifier: ^6.3.5
+        version: 6.3.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       autoprefixer:
         specifier: ^10.4.27
         version: 10.4.27(postcss@8.5.8)
@@ -66,9 +54,18 @@ importers:
       electron-builder:
         specifier: ^24.4.0
         version: 24.13.3(electron-builder-squirrel-windows@24.13.3)
+      lucide-react:
+        specifier: ^0.575.0
+        version: 0.575.0(react@18.3.1)
       postcss:
         specifier: ^8.5.6
         version: 8.5.8
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
       tailwindcss:
         specifier: ^3.4.19
         version: 3.4.19
@@ -84,6 +81,9 @@ importers:
       vite-plugin-electron-renderer:
         specifier: ^0.14.6
         version: 0.14.6
+      zustand:
+        specifier: ^5.0.11
+        version: 5.0.12(@types/react@18.3.28)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
 
 packages:
 
