@@ -8,7 +8,18 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: securenotes-windows-exe
+            artifact_path: release/**/*.exe
+          - os: macos-14
+            artifact_name: securenotes-macos-dmg
+            artifact_path: release/**/*.dmg
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout code
@@ -17,7 +28,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.17.0
+          cache: pnpm
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -31,9 +43,10 @@ jobs:
         run: pnpm run build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: securenotes-windows-exe
-          path: release/**/*.exe
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
