@@ -15,9 +15,11 @@ jobs:
           - os: windows-latest
             artifact_name: securenotes-windows-exe
             artifact_path: release/**/*.exe
+            build_flag: --win        # 明确告知 electron-builder 打 Windows 包
           - os: macos-14
             artifact_name: securenotes-macos-dmg
             artifact_path: release/**/*.dmg
+            build_flag: --mac        # 明确告知 electron-builder 打 macOS 包（arm64）
 
     runs-on: ${{ matrix.os }}
 
@@ -25,22 +27,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22.17.0
           cache: pnpm
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: latest
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build and Package Electron App
-        run: pnpm run build
+      - name: Build Renderer and Electron Main
+        run: pnpm exec tsc --noEmit && pnpm exec vite build
+
+      - name: Package Electron App
+        run: pnpm exec electron-builder ${{ matrix.build_flag }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -50,3 +55,4 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
+          if-no-files-found: error   # 找不到产物文件时报错，而不是静默上传空文件
