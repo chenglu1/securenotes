@@ -50,12 +50,10 @@
     "zustand": "^5.0.11"
   },
   "dependencies": {
-    // ── 主进程运行时依赖（不被 Vite 打包，必须在 node_modules 中）──
-    "sql.js": "^1.14.0",          // 主进程，明确 external
-    "cheerio": "^1.2.0",          // 主进程 github-trending/service.ts
-    "rss-parser": "^3.13.0",      // 主进程 news/fetchers.ts
-    "uuid": "^13.0.0",            // 主进程 database/repositories/* 多处
-    // ── 渲染进程 WASM 库，需要在 asar 外访问 ──
+    "sql.js": "^1.14.0",
+    "cheerio": "^1.2.0",
+    "rss-parser": "^3.13.0",
+    "uuid": "^13.0.0",
     "libsodium-wrappers-sumo": "^0.8.2"
   }
 }
