@@ -1,9 +1,10 @@
 import { DataSourceOptions } from 'typeorm';
 import { Note } from '../entities/note.entity';
+import { NoteShare } from '../entities/note-share.entity';
 import { User } from '../entities/user.entity';
 import { Image } from '../entities/image.entity';
 
-export const databaseEntities = [Note, User, Image];
+export const databaseEntities = [Note, User, Image, NoteShare];
 
 type DatabaseEnv = {
   DATABASE_URL?: string;
@@ -84,4 +85,4 @@ export function createBaseDatabaseOptions(env: DatabaseEnv): DataSourceOptions {
       connectionTimeoutMillis: 10000,
     },
   };
-}
+}

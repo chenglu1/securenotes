@@ -1,0 +1,205 @@
+.share-modal .ant-modal-content {
+  padding: 0 !important;
+  border-radius: 20px !important;
+  overflow: hidden;
+  background: #ffffff !important;
+  border: 1px solid rgba(55, 53, 47, 0.08);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08) !important;
+}
+
+.share-modal .ant-modal-body {
+  padding: 24px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.share-modal .ant-modal-close {
+  top: 18px;
+  right: 18px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  color: #6f6a63;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.share-modal .ant-modal-close:hover {
+  color: #2f3437;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.share-modal__hero {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.share-modal__title,
+.share-modal__title.ant-typography {
+  margin: 0 !important;
+  color: #37352f !important;
+  font-size: 24px !important;
+  line-height: 1.12 !important;
+}
+
+.share-modal__note-name,
+.share-modal__note-name.ant-typography {
+  display: block;
+  max-width: 100%;
+  color: #37352f !important;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.share-modal__alert .ant-alert {
+  border-radius: 14px;
+}
+
+.share-modal__invite-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.share-modal__invite-row .ant-input-affix-wrapper,
+.share-modal__invite-row .ant-btn {
+  height: 46px;
+  border-radius: 14px;
+}
+
+.share-modal .ant-btn-primary {
+  border-color: #2f7d64 !important;
+  background: #2f7d64 !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px rgba(47, 125, 100, 0.18) !important;
+}
+
+.share-modal .ant-btn-primary:hover,
+.share-modal .ant-btn-primary:focus {
+  border-color: #276a55 !important;
+  background: #276a55 !important;
+  color: #ffffff !important;
+}
+
+.share-modal .ant-btn-primary:disabled,
+.share-modal .ant-btn-primary[disabled],
+.share-modal .ant-btn-primary.ant-btn-disabled {
+  border-color: #e3ddd2 !important;
+  background: #f1ede5 !important;
+  color: #a29b90 !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+
+.share-modal__access-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(55, 53, 47, 0.08);
+  background: #faf9f7;
+}
+
+.share-modal__panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.share-modal__panel-title,
+.share-modal__panel-title.ant-typography {
+  display: block;
+  color: #37352f !important;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.share-modal__member-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.share-modal__member-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(55, 53, 47, 0.06);
+}
+
+.share-modal__member-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.share-modal__member-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.share-modal__member-icon {
+  color: #6d6fe3;
+}
+
+.share-modal__member-email,
+.share-modal__member-email.ant-typography {
+  min-width: 0;
+  color: #37352f !important;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.share-modal__member-role {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #6b7280;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.share-modal__member-meta,
+.share-modal__member-meta.ant-typography {
+  display: block;
+  margin-top: 4px;
+  color: #9b978f !important;
+  font-size: 11px;
+}
+
+.share-modal__empty-state {
+  padding: 10px 0 2px;
+}
+
+.share-modal__empty-state .ant-empty {
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .share-modal .ant-modal-body {
+    padding: 20px 18px !important;
+  }
+
+  .share-modal__invite-row,
+  .share-modal__member-item {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .share-modal__member-item .ant-btn {
+    align-self: flex-start;
+  }
+}

@@ -27,6 +27,25 @@ export interface NoteSummary {
   is_dirty: number
 }
 
+export interface SharedNoteSummary {
+  id: string
+  title: string
+  created_at: string
+  updated_at: string
+  owner_email: string
+  role: 'viewer'
+}
+
+export interface SharedNote {
+  id: string
+  title: string
+  content: string
+  created_at: string
+  updated_at: string
+  owner_email: string
+  role: 'viewer'
+}
+
 export interface Tag {
   id: string
   name: string
@@ -71,6 +90,30 @@ interface CloudNoteChangesResponse {
   latestChangeVersion: number
 }
 
+interface SharedNoteSummaryResponse {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  ownerEmail: string
+  role: 'viewer'
+}
+
+interface SharedNoteListResponse {
+  items: SharedNoteSummaryResponse[]
+  total: number
+}
+
+interface SharedNoteDetailResponse {
+  id: string
+  title: string
+  content: string
+  createdAt: string
+  updatedAt: string
+  ownerEmail: string
+  role: 'viewer'
+}
+
 type EditorFlushHandler = () => Promise<void>
 type SyncStatus = 'idle' | 'reauth-required'
 type SyncActionStatus = 'idle' | 'syncing' | 'success' | 'error'
@@ -101,6 +144,29 @@ function toLocalCloudNote(cloudNote: CloudNote) {
     createdAt: cloudNote.createdAt,
     updatedAt: cloudNote.updatedAt,
     deletedAt: cloudNote.deletedAt ?? null,
+  }
+}
+
+function toSharedNoteSummary(sharedNote: SharedNoteSummaryResponse): SharedNoteSummary {
+  return {
+    id: sharedNote.id,
+    title: sharedNote.title,
+    created_at: sharedNote.createdAt,
+    updated_at: sharedNote.updatedAt,
+    owner_email: sharedNote.ownerEmail,
+    role: sharedNote.role,
+  }
+}
+
+function toSharedNote(sharedNote: SharedNoteDetailResponse): SharedNote {
+  return {
+    id: sharedNote.id,
+    title: sharedNote.title,
+    content: sharedNote.content,
+    created_at: sharedNote.createdAt,
+    updated_at: sharedNote.updatedAt,
+    owner_email: sharedNote.ownerEmail,
+    role: sharedNote.role,
   }
 }
 
@@ -146,6 +212,46 @@ async function fetchCloudNoteChangesResponse(token: string, sinceChangeVersion: 
       Authorization: `Bearer ${token}`,
     },
   })
+}
+
+async function fetchSharedNotes(token: string, query?: string): Promise<SharedNoteSummary[]> {
+  const params = query?.trim() ? `?query=${encodeURIComponent(query.trim())}` : ''
+  const response = await fetch(apiUrl(`/notes/shared${params}`), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  const payload = await readJson<ApiResponse<SharedNoteListResponse>>(response)
+  const data = unwrapApiResponse(payload)
+  const items = data?.items ?? null
+  if (!response.ok || !Array.isArray(items)) {
+    throw new Error(getErrorMessage(payload, '获取共享文档列表失败'))
+  }
+
+  return items.map(toSharedNoteSummary)
+}
+
+async function fetchSharedNoteDetail(token: string, noteId: string): Promise<SharedNote | null> {
+  const response = await fetch(apiUrl(`/notes/shared/${noteId}`), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  const payload = await readJson<ApiResponse<SharedNoteDetailResponse>>(response)
+  const data = unwrapApiResponse(payload)
+  if (response.status === 404) {
+    return null
+  }
+
+  if (!response.ok || !data) {
+    throw new Error(getErrorMessage(payload, '获取共享文档详情失败'))
+  }
+
+  return toSharedNote(data)
 }
 
 async function pushCloudNoteResponse(
@@ -456,8 +562,11 @@ async function resolveSyncConflict(note: Note, cloudNote: CloudNote, token: stri
 interface NoteStore {
   // ── State ──
   notes: NoteSummary[]
+  sharedNotes: SharedNoteSummary[]
   selectedNoteId: string | null
   selectedNote: Note | null
+  selectedSharedNoteId: string | null
+  selectedSharedNote: SharedNote | null
   activeEditorNoteId: string | null
   activeEditorFlush: EditorFlushHandler | null
   searchQuery: string
@@ -478,10 +587,12 @@ interface NoteStore {
   // ── Actions ──
   loadNotes: () => Promise<void>
   loadSelectedNote: (id: string | null) => Promise<void>
+  loadSelectedSharedNote: (id: string | null) => Promise<void>
   flushActiveEditor: () => Promise<void>
   registerActiveEditorFlush: (noteId: string, flushHandler: EditorFlushHandler) => void
   unregisterActiveEditorFlush: (noteId: string) => void
   selectNote: (id: string | null) => Promise<void>
+  selectSharedNote: (id: string | null) => Promise<void>
   createNote: () => Promise<Note | null>
   updateNote: (id: string, data: { title?: string; content?: string }) => Promise<void>
   deleteNote: (id: string) => Promise<void>
@@ -508,8 +619,11 @@ interface NoteStore {
 // 避免在多处 set({...}) 中遗漏字段导致状态不一致的 Bug。
 const RESET_AUTH_STATE = {
   notes: [] as NoteSummary[],
+  sharedNotes: [] as SharedNoteSummary[],
   selectedNoteId: null as string | null,
   selectedNote: null as Note | null,
+  selectedSharedNoteId: null as string | null,
+  selectedSharedNote: null as SharedNote | null,
   activeEditorNoteId: null as string | null,
   activeEditorFlush: null as EditorFlushHandler | null,
   isAuthenticated: false,
@@ -529,8 +643,11 @@ function makeReauthState() {
 
 export const useNoteStore = create<NoteStore>((set, get) => ({
   notes: [],
+  sharedNotes: [],
   selectedNoteId: null,
   selectedNote: null,
+  selectedSharedNoteId: null,
+  selectedSharedNote: null,
   activeEditorNoteId: null,
   activeEditorFlush: null,
   searchQuery: '',
@@ -553,18 +670,44 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     try {
       const searchQuery = get().searchQuery.trim()
       const notes = await window.api.getNoteSummaries(searchQuery || undefined)
-      const { selectedNoteId } = get()
+      const { selectedNoteId, selectedSharedNoteId, isAuthenticated, token } = get()
+      let sharedNotes: SharedNoteSummary[] = []
 
-      if (!selectedNoteId) {
-        set({ notes, selectedNote: null, isLoading: false })
+      if (isAuthenticated && token) {
+        try {
+          sharedNotes = await fetchSharedNotes(token, searchQuery || undefined)
+        } catch (err) {
+          console.error('Failed to load shared notes:', err)
+        }
+      }
+
+      if (!selectedNoteId && !selectedSharedNoteId) {
+        set({ notes, sharedNotes, selectedNote: null, selectedSharedNote: null, isLoading: false })
         return
       }
 
-      const selectedNote = await window.api.getNote(selectedNoteId)
+      if (selectedSharedNoteId && token) {
+        const selectedSharedNote = await fetchSharedNoteDetail(token, selectedSharedNoteId)
+        set({
+          notes,
+          sharedNotes,
+          selectedNote: null,
+          selectedNoteId: null,
+          selectedSharedNote: selectedSharedNote ?? null,
+          selectedSharedNoteId: selectedSharedNote ? selectedSharedNoteId : null,
+          isLoading: false,
+        })
+        return
+      }
+
+      const selectedNote = selectedNoteId ? await window.api.getNote(selectedNoteId) : null
       set({
         notes,
+        sharedNotes,
         selectedNote: selectedNote ?? null,
         selectedNoteId: selectedNote ? selectedNoteId : null,
+        selectedSharedNote: null,
+        selectedSharedNoteId: null,
         isLoading: false,
       })
     } catch (err) {
@@ -584,10 +727,38 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       set({
         selectedNote: note ?? null,
         selectedNoteId: note ? id : null,
+        selectedSharedNote: null,
+        selectedSharedNoteId: null,
       })
     } catch (err) {
       console.error(`Failed to load note detail (${id}):`, err)
-      set({ selectedNote: null, selectedNoteId: null })
+      set({ selectedNote: null, selectedNoteId: null, selectedSharedNote: null, selectedSharedNoteId: null })
+    }
+  },
+
+  loadSelectedSharedNote: async (id) => {
+    if (!id) {
+      set({ selectedSharedNote: null })
+      return
+    }
+
+    const { token } = get()
+    if (!token) {
+      set({ selectedSharedNote: null, selectedSharedNoteId: null })
+      return
+    }
+
+    try {
+      const note = await fetchSharedNoteDetail(token, id)
+      set({
+        selectedSharedNote: note ?? null,
+        selectedSharedNoteId: note ? id : null,
+        selectedNote: null,
+        selectedNoteId: null,
+      })
+    } catch (err) {
+      console.error(`Failed to load shared note detail (${id}):`, err)
+      set({ selectedSharedNote: null, selectedSharedNoteId: null })
     }
   },
 
@@ -628,8 +799,24 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       return
     }
 
-    set({ selectedNoteId: id, selectedNote: null, syncCurrentStatus: 'idle' })
+    set({ selectedNoteId: id, selectedNote: null, selectedSharedNoteId: null, selectedSharedNote: null, syncCurrentStatus: 'idle' })
     await get().loadSelectedNote(id)
+  },
+
+  selectSharedNote: async (id) => {
+    const currentId = get().selectedSharedNoteId
+    if (id === currentId) {
+      return
+    }
+
+    const requestVersion = ++noteSelectionRequestVersion
+    await get().flushActiveEditor()
+    if (requestVersion !== noteSelectionRequestVersion) {
+      return
+    }
+
+    set({ selectedSharedNoteId: id, selectedSharedNote: null, selectedNoteId: null, selectedNote: null, syncCurrentStatus: 'idle' })
+    await get().loadSelectedSharedNote(id)
   },
 
   createNote: async () => {
@@ -639,7 +826,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         title: '',
         content: '',
       })
-      set({ selectedNoteId: note.id, selectedNote: note, syncStatus: 'idle', syncCurrentStatus: 'idle' })
+      set({ selectedNoteId: note.id, selectedNote: note, selectedSharedNoteId: null, selectedSharedNote: null, syncStatus: 'idle', syncCurrentStatus: 'idle' })
       await get().loadNotes()
       return note
     } catch (err) {
@@ -690,6 +877,8 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       set({
         selectedNoteId: selectedNoteId === id ? null : selectedNoteId,
         selectedNote: selectedNoteId === id ? null : get().selectedNote,
+        selectedSharedNoteId: get().selectedSharedNoteId,
+        selectedSharedNote: get().selectedSharedNote,
         syncCurrentStatus: selectedNoteId === id ? 'idle' : get().syncCurrentStatus,
       })
       await get().loadNotes()

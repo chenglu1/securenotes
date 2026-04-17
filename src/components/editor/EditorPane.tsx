@@ -3,13 +3,15 @@ import {
   CloudSyncOutlined,
   DeleteOutlined,
   PlusOutlined,
+  ShareAltOutlined,
   SyncOutlined,
 } from '@ant-design/icons'
 import { Alert, Button, Input, Tag, Tooltip, Typography } from 'antd'
 import { ConfigurableTiptapEditor } from '@chenglu1/xeditor-editor'
 import '@chenglu1/xeditor-editor/styles.css'
-import { useNoteStore, type Note } from '../../stores/noteStore'
+import { useNoteStore, type Note, type SharedNote } from '../../stores/noteStore'
 import { ApiResponse, apiUrl, getErrorMessage, readJson, resolveApiUrl, unwrapApiResponse } from '../../services/api'
+import { ShareNoteModal } from '../share/ShareNoteModal'
 
 interface UploadResponse {
   url: string
@@ -25,6 +27,7 @@ interface SelectedNoteEditorProps {
   isAuthenticated: boolean
   isReauthRequired: boolean
   syncCurrentStatus: SyncActionStatus
+  onOpenShare: () => void
   onSyncCurrentNote: (noteId: string) => Promise<void>
   onUpdate: (id: string, data: { title?: string; content?: string }) => Promise<void>
   onDelete: (id: string) => Promise<void>
@@ -36,6 +39,7 @@ function SelectedNoteEditor({
   isAuthenticated,
   isReauthRequired,
   syncCurrentStatus,
+  onOpenShare,
   onSyncCurrentNote,
   onUpdate,
   onDelete,
@@ -218,6 +222,12 @@ function SelectedNoteEditor({
 
           <div className="editor-actions editor-actions--simple app-region-no-drag">
             {isAuthenticated ? (
+              <Button icon={<ShareAltOutlined />} onClick={onOpenShare}>
+                分享
+              </Button>
+            ) : null}
+
+            {isAuthenticated ? (
               <Tooltip title="只同步当前这篇笔记">
                 <Button
                   icon={syncCurrentStatus === 'syncing' ? <SyncOutlined spin /> : <CloudSyncOutlined />}
@@ -267,9 +277,58 @@ function SelectedNoteEditor({
   )
 }
 
+function SharedNoteViewer({ note }: { note: SharedNote }) {
+  const updatedAtLabel = new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(note.updated_at))
+
+  return (
+    <div className="editor-body">
+      <div className="editor-content-wrap">
+        <div className="editor-header editor-header--simple">
+          <div className="editor-header-main app-region-drag">
+            <Typography.Title level={1} className="editor-shared-title app-region-no-drag">
+              {note.title || '无标题'}
+            </Typography.Title>
+
+            <div className="editor-meta-line app-region-no-drag">
+              <Tag color="processing" className="editor-sync-tag">共享文档</Tag>
+              <Typography.Text className="editor-meta-text">只读访问</Typography.Text>
+              <Typography.Text className="editor-meta-text">分享者 {note.owner_email}</Typography.Text>
+              <Typography.Text className="editor-meta-text">最近编辑 {updatedAtLabel}</Typography.Text>
+            </div>
+          </div>
+        </div>
+
+        <Alert
+          showIcon
+          type="info"
+          className="editor-alert"
+          message="这篇文档由其他成员分享给你。当前版本仅支持只读查看。"
+        />
+
+        <div className="editor-surface editor-surface--simple editor-surface--shared">
+          <ConfigurableTiptapEditor
+            value={note.content}
+            valueType="markdown"
+            readOnly={true}
+            showToolbar={false}
+            compact={true}
+            minHeight="560px"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function EditorPane() {
   const selectedNoteId = useNoteStore((s) => s.selectedNoteId)
   const selectedNote = useNoteStore((s) => s.selectedNote)
+  const selectedSharedNote = useNoteStore((s) => s.selectedSharedNote)
   const createNote = useNoteStore((s) => s.createNote)
   const updateNote = useNoteStore((s) => s.updateNote)
   const deleteNote = useNoteStore((s) => s.deleteNote)
@@ -277,6 +336,11 @@ export function EditorPane() {
   const syncStatus = useNoteStore((s) => s.syncStatus)
   const syncCurrentStatus = useNoteStore((s) => s.syncCurrentStatus)
   const syncNoteToCloud = useNoteStore((s) => s.syncNoteToCloud)
+  const [showShareModal, setShowShareModal] = useState(false)
+
+  useEffect(() => {
+    setShowShareModal(false)
+  }, [selectedNoteId])
 
   const handleCreateFromEmpty = useCallback(async () => {
     await createNote()
@@ -301,7 +365,7 @@ export function EditorPane() {
     return resolveApiUrl(data.url)
   }, []) as NoteImageUploadHandler
 
-  if (!selectedNote) {
+  if (!selectedNote && !selectedSharedNote) {
     return (
       <section className="editor-panel">
         <div className="editor-body editor-body--empty editor-body--notion-empty">
@@ -329,19 +393,43 @@ export function EditorPane() {
     )
   }
 
+  if (selectedSharedNote) {
+    return (
+      <section className="editor-panel">
+        <SharedNoteViewer note={selectedSharedNote} />
+      </section>
+    )
+  }
+
+  if (!selectedNote) {
+    return null
+  }
+
+  const activeNote = selectedNote
+
   return (
-    <section className="editor-panel">
-      <SelectedNoteEditor
-        key={selectedNote.id}
-        note={selectedNote}
-        isAuthenticated={isAuthenticated}
-        isReauthRequired={syncStatus === 'reauth-required'}
+    <>
+      <section className="editor-panel">
+        <SelectedNoteEditor
+          key={activeNote.id}
+          note={activeNote}
+          isAuthenticated={isAuthenticated}
+          isReauthRequired={syncStatus === 'reauth-required'}
+          syncCurrentStatus={syncCurrentStatus}
+          onOpenShare={() => setShowShareModal(true)}
+          onSyncCurrentNote={syncNoteToCloud}
+          onUpdate={updateNote}
+          onDelete={deleteNote}
+          onImageUpload={handleImageUpload}
+        />
+      </section>
+
+      <ShareNoteModal
+        open={showShareModal}
+        note={activeNote}
         syncCurrentStatus={syncCurrentStatus}
-        onSyncCurrentNote={syncNoteToCloud}
-        onUpdate={updateNote}
-        onDelete={deleteNote}
-        onImageUpload={handleImageUpload}
+        onClose={() => setShowShareModal(false)}
       />
-    </section>
+    </>
   )
 }

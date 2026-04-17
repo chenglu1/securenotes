@@ -11,13 +11,14 @@ import {
   SearchOutlined,
   SettingOutlined,
   SyncOutlined,
+  TeamOutlined,
   ThunderboltOutlined,
   UserOutlined,
   NotificationOutlined,
 } from '@ant-design/icons'
 import { Avatar, Button, Empty, Input, Popconfirm, Popover, Typography } from 'antd'
 import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react'
-import { useNoteStore, type NoteSummary } from '../../stores/noteStore'
+import { useNoteStore, type NoteSummary, type SharedNoteSummary } from '../../stores/noteStore'
 
 interface SidebarProps {
   onShowAuth: () => void
@@ -29,10 +30,10 @@ interface SidebarProps {
   isNewsRunning?: boolean
 }
 
-interface NoteGroup {
+interface NoteGroup<T extends { updated_at: string }> {
   key: string
   title: string
-  notes: NoteSummary[]
+  notes: T[]
 }
 
 function getStartOfDay(date: Date) {
@@ -63,9 +64,9 @@ function formatRelativeTime(dateStr: string) {
   return formatCalendarDay(date)
 }
 
-function groupNotesByUpdatedAt(notes: NoteSummary[]) {
+function groupNotesByUpdatedAt<T extends { updated_at: string }>(notes: T[]) {
   const todayStart = getStartOfDay(new Date())
-  const groups: NoteGroup[] = [
+  const groups: NoteGroup<T>[] = [
     { key: 'today', title: '今天', notes: [] },
     { key: 'last-30-days', title: '过去 30 天', notes: [] },
     { key: 'earlier', title: '更早', notes: [] },
@@ -138,10 +139,13 @@ export function Sidebar({
   isNewsRunning = false,
 }: SidebarProps) {
   const notes = useNoteStore((s) => s.notes)
+  const sharedNotes = useNoteStore((s) => s.sharedNotes)
   const selectedNoteId = useNoteStore((s) => s.selectedNoteId)
+  const selectedSharedNoteId = useNoteStore((s) => s.selectedSharedNoteId)
   const searchQuery = useNoteStore((s) => s.searchQuery)
   const setSearchQuery = useNoteStore((s) => s.setSearchQuery)
   const selectNote = useNoteStore((s) => s.selectNote)
+  const selectSharedNote = useNoteStore((s) => s.selectSharedNote)
   const createNote = useNoteStore((s) => s.createNote)
   const updateNote = useNoteStore((s) => s.updateNote)
   const deleteNote = useNoteStore((s) => s.deleteNote)
@@ -170,6 +174,12 @@ export function Sidebar({
     await selectNote(noteId)
     onRequestClose?.()
   }, [onRequestClose, selectNote])
+
+  const handleSelectSharedNote = useCallback(async (noteId: string) => {
+    setOpenMenuNoteId(null)
+    await selectSharedNote(noteId)
+    onRequestClose?.()
+  }, [onRequestClose, selectSharedNote])
 
   const handleOpenAuth = useCallback(() => {
     onShowAuth()
@@ -236,6 +246,15 @@ export function Sidebar({
     void handleSelectNote(noteId)
   }, [editingNoteId, handleSelectNote])
 
+  const handleSharedNoteCardKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>, noteId: string) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return
+    }
+
+    event.preventDefault()
+    void handleSelectSharedNote(noteId)
+  }, [handleSelectSharedNote])
+
   useEffect(() => {
     if (!hasHydratedSearch.current) {
       hasHydratedSearch.current = true
@@ -253,6 +272,7 @@ export function Sidebar({
 
   const visibleNotes = notes
   const noteGroups = groupNotesByUpdatedAt(visibleNotes)
+  const sharedNoteGroups = groupNotesByUpdatedAt(sharedNotes)
 
   const dirtyCount = notes.filter((note) => note.is_dirty).length
   const isReauthRequired = syncStatus === 'reauth-required'
@@ -290,10 +310,10 @@ export function Sidebar({
       ? '需要重新登录'
       : '仅本地保存'
   const metaText = deferredSearchQuery
-    ? `${visibleNotes.length} 条结果`
+    ? `${visibleNotes.length + sharedNotes.length} 条结果`
     : dirtyCount > 0
       ? `${dirtyCount} 未同步`
-      : `${notes.length} 篇笔记`
+      : `${notes.length} 篇笔记${sharedNotes.length > 0 ? ` · ${sharedNotes.length} 篇共享` : ''}`
   const workspaceName = getWorkspaceName(userEmail, userId)
   const avatarText = getAvatarText(userEmail, userId)
   const accountHint = isAuthenticated
@@ -450,136 +470,187 @@ export function Sidebar({
             />
           </div>
         ) : (
-          noteGroups.map((group) => (
-            <section key={group.key} className="notes-group" aria-label={group.title}>
-              <div className="notes-group__label">{group.title}</div>
-              <div className="notes-group__items">
-                {group.notes.map((note) => (
-                  <div
-                    key={note.id}
-                    role="button"
-                    tabIndex={editingNoteId === note.id ? -1 : 0}
-                    className={`note-list-item ${selectedNoteId === note.id ? 'is-active' : ''} ${openMenuNoteId === note.id ? 'is-menu-open' : ''} ${editingNoteId === note.id ? 'is-editing' : ''}`}
-                    onClick={() => {
-                      if (editingNoteId === note.id) {
-                        return
-                      }
+          <>
+            {noteGroups.map((group) => (
+              <section key={group.key} className="notes-group" aria-label={group.title}>
+                <div className="notes-group__label">{group.title}</div>
+                <div className="notes-group__items">
+                  {group.notes.map((note) => (
+                    <div
+                      key={note.id}
+                      role="button"
+                      tabIndex={editingNoteId === note.id ? -1 : 0}
+                      className={`note-list-item ${selectedNoteId === note.id ? 'is-active' : ''} ${openMenuNoteId === note.id ? 'is-menu-open' : ''} ${editingNoteId === note.id ? 'is-editing' : ''}`}
+                      onClick={() => {
+                        if (editingNoteId === note.id) {
+                          return
+                        }
 
-                      void handleSelectNote(note.id)
-                    }}
-                    onKeyDown={(event) => handleNoteCardKeyDown(event, note.id)}
-                  >
-                    <div className="note-list-item__head">
-                      <span className="note-list-item__icon" aria-hidden="true">
-                        <FileTextOutlined />
-                      </span>
+                        void handleSelectNote(note.id)
+                      }}
+                      onKeyDown={(event) => handleNoteCardKeyDown(event, note.id)}
+                    >
+                      <div className="note-list-item__head">
+                        <span className="note-list-item__icon" aria-hidden="true">
+                          <FileTextOutlined />
+                        </span>
 
-                      <div className="note-list-item__main">
-                        {editingNoteId === note.id ? (
-                          <Input
+                        <div className="note-list-item__main">
+                          {editingNoteId === note.id ? (
+                            <Input
+                              size="small"
+                              autoFocus
+                              value={editingTitle}
+                              placeholder="无标题"
+                              className="note-title-input"
+                              onMouseDown={(event) => event.stopPropagation()}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) => setEditingTitle(event.target.value)}
+                              onPressEnter={() => void submitTitleEdit(note.id)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Escape') {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  cancelTitleEdit()
+                                }
+                              }}
+                            />
+                          ) : (
+                            <Typography.Text className="note-title" strong ellipsis>
+                              {note.title || '无标题'}
+                            </Typography.Text>
+                          )}
+                        </div>
+
+                        <div className="note-list-item__meta">
+                          <span className="note-list-item__time">{formatRelativeTime(note.updated_at)}</span>
+                          {shouldShowNoteStatus(note, isAuthenticated) ? (
+                            <span className={`note-status note-status--inline ${note.is_dirty ? 'note-status--dirty' : ''}`}>
+                              {getNoteStatusLabel(note, isAuthenticated)}
+                            </span>
+                          ) : null}
+                          {note.deleted_at ? <span className="note-list-item__time">已删除</span> : null}
+                        </div>
+                      </div>
+
+                      {editingNoteId === note.id ? (
+                        <div className="note-list-item__edit-actions" onClick={(event) => event.stopPropagation()}>
+                          <Button
+                            type="primary"
                             size="small"
-                            autoFocus
-                            value={editingTitle}
-                            placeholder="无标题"
-                            className="note-title-input"
-                            onMouseDown={(event) => event.stopPropagation()}
-                            onClick={(event) => event.stopPropagation()}
-                            onChange={(event) => setEditingTitle(event.target.value)}
-                            onPressEnter={() => void submitTitleEdit(note.id)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Escape') {
-                                event.preventDefault()
-                                event.stopPropagation()
-                                cancelTitleEdit()
-                              }
+                            className="note-list-item__edit-button"
+                            onClick={() => void submitTitleEdit(note.id)}
+                          >
+                            保存
+                          </Button>
+                          <Button
+                            size="small"
+                            className="note-list-item__edit-button"
+                            onClick={cancelTitleEdit}
+                          >
+                            取消
+                          </Button>
+                        </div>
+                      ) : null}
+
+                      <Popover
+                        trigger="click"
+                        placement="bottomRight"
+                        overlayClassName="note-actions-popover"
+                        open={openMenuNoteId === note.id}
+                        onOpenChange={(open) => setOpenMenuNoteId(open ? note.id : null)}
+                        content={
+                          <div className="note-list-item__menu">
+                            <button
+                              type="button"
+                              className="note-list-item__menu-button"
+                              onClick={() => startTitleEdit(note.id, note.title)}
+                            >
+                              <EditOutlined />
+                              <span>修改标题</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="note-list-item__menu-button note-list-item__menu-button--danger"
+                              onClick={() => void handleDeleteNote(note.id)}
+                            >
+                              <DeleteOutlined />
+                              <span>删除笔记</span>
+                            </button>
+                          </div>
+                        }
+                      >
+                        <div className="note-list-item__actions" onClick={(event) => event.stopPropagation()}>
+                          <Button
+                            type="text"
+                            size="small"
+                            className="note-list-item__more"
+                            icon={<EllipsisOutlined />}
+                            aria-label="更多操作"
+                            aria-expanded={openMenuNoteId === note.id}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setOpenMenuNoteId((current) => current === note.id ? null : note.id)
                             }}
                           />
-                        ) : (
-                          <Typography.Text className="note-title" strong ellipsis>
-                            {note.title || '无标题'}
-                          </Typography.Text>
-                        )}
-                      </div>
-
-                      <div className="note-list-item__meta">
-                        <span className="note-list-item__time">{formatRelativeTime(note.updated_at)}</span>
-                        {shouldShowNoteStatus(note, isAuthenticated) ? (
-                          <span className={`note-status note-status--inline ${note.is_dirty ? 'note-status--dirty' : ''}`}>
-                            {getNoteStatusLabel(note, isAuthenticated)}
-                          </span>
-                        ) : null}
-                        {note.deleted_at ? <span className="note-list-item__time">已删除</span> : null}
-                      </div>
-                    </div>
-
-                    {editingNoteId === note.id ? (
-                      <div className="note-list-item__edit-actions" onClick={(event) => event.stopPropagation()}>
-                        <Button
-                          type="primary"
-                          size="small"
-                          className="note-list-item__edit-button"
-                          onClick={() => void submitTitleEdit(note.id)}
-                        >
-                          保存
-                        </Button>
-                        <Button
-                          size="small"
-                          className="note-list-item__edit-button"
-                          onClick={cancelTitleEdit}
-                        >
-                          取消
-                        </Button>
-                      </div>
-                    ) : null}
-
-                    <Popover
-                      trigger="click"
-                      placement="bottomRight"
-                      overlayClassName="note-actions-popover"
-                      open={openMenuNoteId === note.id}
-                      onOpenChange={(open) => setOpenMenuNoteId(open ? note.id : null)}
-                      content={
-                        <div className="note-list-item__menu">
-                          <button
-                            type="button"
-                            className="note-list-item__menu-button"
-                            onClick={() => startTitleEdit(note.id, note.title)}
-                          >
-                            <EditOutlined />
-                            <span>修改标题</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            className="note-list-item__menu-button note-list-item__menu-button--danger"
-                            onClick={() => void handleDeleteNote(note.id)}
-                          >
-                            <DeleteOutlined />
-                            <span>删除笔记</span>
-                          </button>
                         </div>
-                      }
-                    >
-                      <div className="note-list-item__actions" onClick={(event) => event.stopPropagation()}>
-                        <Button
-                          type="text"
-                          size="small"
-                          className="note-list-item__more"
-                          icon={<EllipsisOutlined />}
-                          aria-label="更多操作"
-                          aria-expanded={openMenuNoteId === note.id}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            setOpenMenuNoteId((current) => current === note.id ? null : note.id)
+                      </Popover>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+
+            {isAuthenticated && sharedNotes.length > 0 ? (
+              <div className="notes-subsection">
+                <div className="list-heading list-heading--simple list-heading--secondary">
+                  <Typography.Text className="list-heading__title">与我共享</Typography.Text>
+                  <Typography.Text className="list-heading__meta">{sharedNotes.length} 篇</Typography.Text>
+                </div>
+
+                {sharedNoteGroups.map((group) => (
+                  <section key={`shared-${group.key}`} className="notes-group notes-group--shared" aria-label={`与我共享 ${group.title}`}>
+                    <div className="notes-group__label">{group.title}</div>
+                    <div className="notes-group__items">
+                      {group.notes.map((note) => (
+                        <div
+                          key={note.id}
+                          role="button"
+                          tabIndex={0}
+                          className={`note-list-item note-list-item--shared ${selectedSharedNoteId === note.id ? 'is-active' : ''}`}
+                          onClick={() => {
+                            void handleSelectSharedNote(note.id)
                           }}
-                        />
-                      </div>
-                    </Popover>
-                  </div>
+                          onKeyDown={(event) => handleSharedNoteCardKeyDown(event, note.id)}
+                        >
+                          <div className="note-list-item__head">
+                            <span className="note-list-item__icon note-list-item__icon--shared" aria-hidden="true">
+                              <TeamOutlined />
+                            </span>
+
+                            <div className="note-list-item__main">
+                              <Typography.Text className="note-title" strong ellipsis>
+                                {note.title || '无标题'}
+                              </Typography.Text>
+                              <Typography.Text className="note-list-item__subtitle" ellipsis>
+                                分享者 {note.owner_email}
+                              </Typography.Text>
+                            </div>
+
+                            <div className="note-list-item__meta">
+                              <span className="note-list-item__time">{formatRelativeTime(note.updated_at)}</span>
+                              <span className="note-status note-status--inline note-status--shared">只读</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
                 ))}
               </div>
-            </section>
-          ))
+            ) : null}
+          </>
         )}
       </div>
 

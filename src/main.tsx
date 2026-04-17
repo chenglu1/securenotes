@@ -10,6 +10,7 @@ import './styles/editor.css'
 import './styles/auth.css'
 import './styles/news.css'
 import './styles/github.css'
+import './styles/share.css'
 
 const antdTheme: ThemeConfig = {
   token: {
