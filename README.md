@@ -185,5 +185,7 @@ electron-vite-boilerplate/
 
 - [server/NEON_SETUP.md](./server/NEON_SETUP.md)：Neon 数据库接入说明
 - [server/GOOGLE_LOGIN_SETUP.md](./server/GOOGLE_LOGIN_SETUP.md)：Google 登录接入步骤
+- [DEVELOPMENT_GUIDELINES.md](./DEVELOPMENT_GUIDELINES.md)：团队协作与 AI 协作开发规范
+- [.github/copilot-instructions.md](./.github/copilot-instructions.md)：仓库级 Copilot 开发指令
 
 README 保留为唯一的项目入口说明，避免多份文档重复维护。
