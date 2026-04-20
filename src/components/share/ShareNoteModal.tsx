@@ -1,4 +1,4 @@
-import { App as AntdApp, Alert, Button, Empty, Input, Modal, Skeleton, Typography } from 'antd'
+import { App as AntdApp, Alert, AutoComplete, Button, Empty, Input, Modal, Skeleton, Typography } from 'antd'
 import { DeleteOutlined, MailOutlined, TeamOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { type ApiResponse, apiUrl, getErrorMessage, readJson, unwrapApiResponse } from '../../services/api'
@@ -24,6 +24,39 @@ interface NoteShareStateResponse {
   items: NoteShareMember[]
 }
 
+interface NoteShareCandidate {
+  id: string
+  email: string
+}
+
+interface NoteShareCandidateListResponse {
+  items: NoteShareCandidate[]
+  total: number
+}
+
+interface ShareCandidateOption {
+  value: string
+  label: string
+}
+
+function normalizeShareErrorMessage(message: string, fallback: string) {
+  const normalizedMessage = message.trim() || fallback
+
+  if (/relation\s+"note_shares"\s+does not exist/i.test(normalizedMessage)) {
+    return '分享服务尚未完成初始化，请先重新部署后端或执行数据库迁移。'
+  }
+
+  return normalizedMessage
+}
+
+function getShareErrorMessage(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) {
+    return fallback
+  }
+
+  return normalizeShareErrorMessage(error.message, fallback)
+}
+
 function formatInviteTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
@@ -47,6 +80,9 @@ export function ShareNoteModal({ open, note, syncCurrentStatus, onClose }: Share
   const [submitting, setSubmitting] = useState(false)
   const [removingShareId, setRemovingShareId] = useState<string | null>(null)
   const [shareState, setShareState] = useState<NoteShareStateResponse | null>(null)
+  const [candidateOptions, setCandidateOptions] = useState<ShareCandidateOption[]>([])
+  const [searchingCandidates, setSearchingCandidates] = useState(false)
+  const [candidateSearchError, setCandidateSearchError] = useState('')
   const [error, setError] = useState('')
 
   const loadShareState = useCallback(async () => {
@@ -72,7 +108,7 @@ export function ShareNoteModal({ open, note, syncCurrentStatus, onClose }: Share
 
       setShareState(data)
     } catch (nextError) {
-      setError(nextError instanceof Error && nextError.message.trim() ? nextError.message : '读取分享状态失败')
+      setError(getShareErrorMessage(nextError, '读取分享状态失败'))
       setShareState(null)
     } finally {
       setLoading(false)
@@ -83,6 +119,9 @@ export function ShareNoteModal({ open, note, syncCurrentStatus, onClose }: Share
     if (!open) {
       setEmail('')
       setError('')
+      setCandidateOptions([])
+      setCandidateSearchError('')
+      setSearchingCandidates(false)
       return
     }
 
@@ -108,6 +147,68 @@ export function ShareNoteModal({ open, note, syncCurrentStatus, onClose }: Share
 
     return null
   }, [isAuthenticated, note.is_dirty, note.sync_version, shareState, syncCurrentStatus, token])
+
+  useEffect(() => {
+    const query = email.trim().toLowerCase()
+
+    if (!open || !token || inviteBlockedReason || query.length < 2) {
+      setCandidateOptions([])
+      setCandidateSearchError('')
+      setSearchingCandidates(false)
+      return
+    }
+
+    let cancelled = false
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(async () => {
+      setSearchingCandidates(true)
+      setCandidateOptions([])
+      setCandidateSearchError('')
+
+      try {
+        const response = await fetch(apiUrl(`/notes/${note.id}/shares/candidates?query=${encodeURIComponent(query)}`), {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        })
+        const payload = await readJson<ApiResponse<NoteShareCandidateListResponse>>(response)
+        const data = unwrapApiResponse(payload)
+        if (!response.ok || !data) {
+          throw new Error(getErrorMessage(payload, '搜索成员失败'))
+        }
+
+        if (cancelled) {
+          return
+        }
+
+        setCandidateOptions(
+          data.items.map((candidate) => ({
+            value: candidate.email,
+            label: candidate.email,
+          })),
+        )
+      } catch (nextError) {
+        if (cancelled || (nextError instanceof DOMException && nextError.name === 'AbortError')) {
+          return
+        }
+
+        console.error('Failed to search share candidates:', nextError)
+        setCandidateOptions([])
+        setCandidateSearchError(getShareErrorMessage(nextError, '搜索成员失败'))
+      } finally {
+        if (!cancelled) {
+          setSearchingCandidates(false)
+        }
+      }
+    }, 240)
+
+    return () => {
+      cancelled = true
+      controller.abort()
+      window.clearTimeout(timeoutId)
+    }
+  }, [email, inviteBlockedReason, note.id, open, token])
 
   const handleInvite = useCallback(async () => {
     if (!token) {
@@ -137,10 +238,12 @@ export function ShareNoteModal({ open, note, syncCurrentStatus, onClose }: Share
       }
 
       setEmail('')
+      setCandidateOptions([])
+      setCandidateSearchError('')
       message.success('文档已共享给该成员')
       await loadShareState()
     } catch (nextError) {
-      setError(nextError instanceof Error && nextError.message.trim() ? nextError.message : '分享文档失败')
+      setError(getShareErrorMessage(nextError, '分享文档失败'))
     } finally {
       setSubmitting(false)
     }
@@ -169,11 +272,27 @@ export function ShareNoteModal({ open, note, syncCurrentStatus, onClose }: Share
       message.success('已取消该成员的访问权限')
       await loadShareState()
     } catch (nextError) {
-      setError(nextError instanceof Error && nextError.message.trim() ? nextError.message : '取消分享失败')
+      setError(getShareErrorMessage(nextError, '取消分享失败'))
     } finally {
       setRemovingShareId(null)
     }
   }, [loadShareState, message, note.id, token])
+
+  const candidateNotFoundContent = useMemo(() => {
+    if (candidateSearchError) {
+      return candidateSearchError
+    }
+
+    if (searchingCandidates) {
+      return '正在搜索成员...'
+    }
+
+    if (email.trim().length < 2) {
+      return '至少输入 2 个字符开始搜索'
+    }
+
+    return '未找到匹配成员'
+  }, [candidateSearchError, email, searchingCandidates])
 
   return (
     <Modal
@@ -205,17 +324,25 @@ export function ShareNoteModal({ open, note, syncCurrentStatus, onClose }: Share
       ) : null}
 
       <div className="share-modal__invite-row">
-        <Input
-          size="large"
+        <AutoComplete
+          className="share-modal__email-search"
           value={email}
-          prefix={<MailOutlined />}
-          placeholder="输入已注册成员的邮箱"
-          disabled={loading || submitting}
-          onChange={(event) => setEmail(event.target.value)}
-          onPressEnter={() => {
-            void handleInvite()
-          }}
-        />
+          options={candidateOptions}
+          filterOption={false}
+          notFoundContent={candidateNotFoundContent}
+          onChange={(nextValue) => setEmail(nextValue)}
+          onSelect={(nextValue) => setEmail(nextValue)}
+        >
+          <Input
+            size="large"
+            prefix={<MailOutlined />}
+            placeholder="搜索或输入已注册成员邮箱"
+            disabled={loading || submitting}
+            onPressEnter={() => {
+              void handleInvite()
+            }}
+          />
+        </AutoComplete>
 
         <Button
           type="primary"

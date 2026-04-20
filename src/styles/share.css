@@ -62,6 +62,10 @@
   gap: 10px;
 }
 
+.share-modal__invite-row .ant-select {
+  width: 100%;
+}
+
 .share-modal__invite-row .ant-input-affix-wrapper,
 .share-modal__invite-row .ant-btn {
   height: 46px;

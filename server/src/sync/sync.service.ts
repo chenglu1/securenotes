@@ -28,6 +28,11 @@ export interface NoteShareStateDto {
   items: NoteShareMemberDto[];
 }
 
+export interface NoteShareCandidateDto {
+  id: string;
+  email: string;
+}
+
 export interface SharedNoteSummaryDto {
   id: string;
   title: string;
@@ -110,6 +115,45 @@ export class SyncService {
       email: row.email,
       role: row.role,
       createdAt: new Date(row.createdAt),
+    }));
+  }
+
+  async searchShareCandidates(
+    ownerUserId: string,
+    noteId: string,
+    query?: string,
+  ): Promise<NoteShareCandidateDto[]> {
+    const note = await this.getOwnedActiveNote(ownerUserId, noteId);
+    const normalizedQuery = query?.trim().toLowerCase();
+
+    if (!normalizedQuery || normalizedQuery.length < 2) {
+      return [];
+    }
+
+    const shareability = this.getNoteShareability(note);
+    if (!shareability.canInvite) {
+      return [];
+    }
+
+    const rows = await this.userRepo
+      .createQueryBuilder('user')
+      .leftJoin(
+        NoteShare,
+        'share',
+        'share."sharedWithUserId" = user.id AND share."noteId" = :noteId AND share."ownerUserId" = :ownerUserId',
+        { noteId, ownerUserId },
+      )
+      .select(['user.id AS "id"', 'user.email AS "email"'])
+      .where('user.id != :ownerUserId', { ownerUserId })
+      .andWhere('share.id IS NULL')
+      .andWhere('LOWER(user.email) LIKE :query', { query: `%${normalizedQuery}%` })
+      .orderBy('user.email', 'ASC')
+      .limit(8)
+      .getRawMany<NoteShareCandidateDto>();
+
+    return rows.map((row) => ({
+      id: row.id,
+      email: row.email,
     }));
   }
 

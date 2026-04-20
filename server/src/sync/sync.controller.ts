@@ -138,6 +138,24 @@ export class SyncController {
     return ok(state, '获取分享状态成功');
   }
 
+  @Get(':id/shares/candidates')
+  @HttpCode(200)
+  async searchShareCandidates(
+    @Param('id') id: string,
+    @Query('query') query: string | undefined,
+    @Headers('authorization') auth?: string,
+  ) {
+    const userId = await this.getUserId(auth);
+    const candidates = await this.syncService.searchShareCandidates(userId, id, query);
+    return ok(
+      {
+        items: candidates,
+        total: candidates.length,
+      },
+      '获取可分享成员成功',
+    );
+  }
+
   @Post(':id/shares')
   @HttpCode(200)
   async shareNote(
